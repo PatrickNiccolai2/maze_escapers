@@ -21,6 +21,8 @@ from maze_escapers.maze_reader import MazeReader
 class SharedMap():
     def __init__(self):
         self.get_whole_graph()
+        self.known_vertices = []
+        self.known_edges = []
         self.init_neighbors_service()
         self.init_add_to_map_service()
 
@@ -39,8 +41,20 @@ class SharedMap():
 
     def handle_neighbors_service_request(self, req):
         print("in handle_neighbors_service_request, req = " + str(req))
+        vertex = [req.x, req.y]
+        resp_arr = []
+
+        if(vertex in self.known_vertices):
+            for edge in self.whole_graph_edges:
+                if(edge[0] == vertex):
+                    resp_arr.append(edge[1][0])
+                    resp_arr.append(edge[1][1])
+                elif(edge[1] == vertex):
+                    resp_arr.append(edge[0][0])
+                    resp_arr.append(edge[0][1])
+
         resp = NeighborsResponse()
-        resp.neighbors = [0,0,1,1,2,2]
+        resp.neighbors = resp_arr
         return resp
 
     def init_add_to_map_service(self):
@@ -49,6 +63,17 @@ class SharedMap():
 
     def handle_add_to_map_service_request(self, req):
         print("in handle_add_to_map_service_request, x = " + str(req))
+        vertex = [req.x, req.y]
+        if(vertex not in self.known_vertices):
+            self.known_vertices.append(vertex)
+            for edge in self.whole_graph_edges:
+                if(edge[0] == vertex or edge[1] == 1):
+                    if(edge not in self.known_edges):
+                        self.known_edges.append(edge)
+
+            return 1
+        else:
+            return -1 
 
 
 def main():

@@ -27,9 +27,15 @@ class Explorer():
     def __init__(self):
         print("before wait")
         rospy.wait_for_service("/neighbor_service")
+        rospy.wait_for_service("/add_to_map_service")
         print("after wait")
-        proxy = rospy.ServiceProxy("/neighbor_service", Neighbors)
-        resp = proxy(0,0)
+
+        add_proxy = rospy.ServiceProxy("/add_to_map_service", AddToMap)
+        resp = add_proxy(1,1)
+        print(resp)
+
+        neighbor_proxy = rospy.ServiceProxy("/neighbor_service", Neighbors)
+        resp = neighbor_proxy(1,1)
         print(resp)
 
 def main():
