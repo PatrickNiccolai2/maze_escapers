@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+#The line above is important so that this file is interpreted with Python when running it.
+
+# Import of python modules.
+import math # use of pi.
+import tf
+
+# import of relevant libraries.
+import rospy # module for ROS APIs
+from geometry_msgs.msg import Twist # message type for cmd_vel
+from geometry_msgs.msg import PoseWithCovarianceStamped
+from sensor_msgs.msg import LaserScan # message type for scan
+from nav_msgs.msg import Odometry
+from maze_escapers.srv import Neighbors, NeighborsResponse
+from maze_escapers.srv import AddToMap, AddToMapResponse
+
+from maze_escapers.maze_reader import MazeReader
+
+
+
+class SharedMap():
+    def __init__(self):
+        self.get_whole_graph()
+        self.init_neighbors_service()
+        self.init_add_to_map_service()
+
+    def get_whole_graph(self):
+        filename = "/root/catkin_ws/src/maze_escapers/medmaze2.png"
+        maze_reader = MazeReader(filename)
+        self.whole_graph_vertices, self.whole_graph_edges = maze_reader.get_graph_representation()
+        print("Vertices")
+        print(self.whole_graph_vertices)
+        print("Edges")
+        print(self.whole_graph_edges)
+
+    def init_neighbors_service(self):
+        s = rospy.Service('/neighbor_service', Neighbors, self.handle_neighbors_service_request)
+        print("neighbor_service server ready")
+
+    def handle_neighbors_service_request(self, req):
+        print("in handle_neighbors_service_request, req = " + str(req))
+        resp = NeighborsResponse()
+        resp.neighbors = [0,0,1,1,2,2]
+        return resp
+
+    def init_add_to_map_service(self):
+        s = rospy.Service('/add_to_map_service', AddToMap, self.handle_add_to_map_service_request)
+        print("add_to_map_service server ready")
+
+    def handle_add_to_map_service_request(self, req):
+        print("in handle_add_to_map_service_request, x = " + str(req))
+
+
+def main():
+    """Main function."""
+
+    # 1st. initialization of node.
+    rospy.init_node("shared_map")
+
+    # Sleep for a few seconds to wait for the registration.
+    rospy.sleep(2)
+
+    sharedmap = SharedMap()
+
+    # Robot moves 1 m forward, rotate of 180 degrees, and moves 1 m forward.
+    try:
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        rospy.logerr("ROS node interrupted.")
+
+
+if __name__ == "__main__":
+    """Run the main function."""
+    main()

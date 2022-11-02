@@ -38,6 +38,8 @@ add_message_files(
    FILES
    RobotNames.srv
    Waypoint.srv
+   Neighbors.srv
+   AddToMap.srv
 )
 
 add_action_files(
@@ -89,6 +91,8 @@ catkin_install_python(PROGRAMS
   nodes/follower
   nodes/tf_broadcaster
   nodes/rand_waypoints
+  nodes/shared_map
+  nodes/explorer
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
