@@ -1,0 +1,9 @@
+# Define the goal
+float32 x
+float32 y
+---
+# Define the result
+int8 done
+---
+# Define feedback message
+float32 feedback_distance

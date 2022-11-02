@@ -1,0 +1,309 @@
+#!/usr/bin/env python
+#The line above is important so that this file is interpreted with Python when running it.
+
+# Import of python modules.
+import math # use of pi.
+import tf
+
+# import of relevant libraries.
+import rospy # module for ROS APIs
+from geometry_msgs.msg import Twist # message type for cmd_vel
+from geometry_msgs.msg import PoseWithCovarianceStamped
+from sensor_msgs.msg import LaserScan # message type for scan
+from nav_msgs.msg import Odometry
+from auctions.msg import RobotVertex
+from auctions.srv import RobotNames
+from auctions.srv import Waypoint, WaypointResponse
+
+import actionlib
+import auctions.msg._VertexFeedback as vertexfeedback
+import auctions.msg._VertexAction as vertexaction
+import auctions.msg._VertexResult as vertexresult
+
+# Constants.
+FREQUENCY = 10 #Hz.
+LINEAR_VELOCITY = 0.2 # m/s
+ANGULAR_VELOCITY = math.pi/4 # rad/s
+LASER_ANGLE_FRONT = 0 # radians
+MIN_THRESHOLD_DISTANCE = 0.5 # m, threshold distance.
+DEFAULT_CMD_VEL_TOPIC = 'cmd_vel'
+DEFAULT_SCAN_TOPIC = 'scan'
+
+class Follower():
+    _feedback = vertexfeedback.vertexFeedback
+    _result = vertexresult.vertexResult
+    my_position = 0
+    def __init__(self):
+        rospy.Subscriber("/vertex_topic", RobotVertex, self.vertex_msg_callback)
+        # Get robots name and number
+        self.my_name = rospy.get_namespace()
+        if(self.my_name == '/robot_1/'):
+            self.my_num = 1 
+        elif(self.my_name == '/robot_2/'):
+            self.my_num = 2
+        elif(self.my_name == '/robot_3/'):
+            self.my_num = 3
+        elif(self.my_name == '/robot_4/'):
+            self.my_num = 4
+        elif(self.my_name == '/robot_5/'):
+            self.my_num = 5
+        elif(self.my_name == '/robot_6/'):
+            self.my_num = 6
+        elif(self.my_name == '/robot_7/'):
+            self.my_num = 7
+        elif(self.my_name == '/robot_8/'):
+            self.my_num = 8
+        elif(self.my_name == '/robot_9/'):
+            self.my_num = 9
+            
+            
+        # Subscribe to my odom
+        rospy.Subscriber(self.my_name + "odom", Odometry, self.my_pose_callback)
+
+        # Publisher for moving
+        self._cmd_pub = rospy.Publisher(self.my_name + "cmd_vel", Twist, queue_size=1)
+
+        self.init_waypoint_service()
+        # Publish initial position for tf_broadcaster
+        self.publish_initial_position()
+
+        # Send my name to names service
+        self.register_in_service()
+
+        #rospy.Subscriber("/initialpose", PoseWithCovarianceStamped, self.my_pose_callback, self.my_name)
+
+        # Start my action server
+        self.init_action_server()
+
+    '''
+    Send my name to names service so leader knows my name
+    '''
+    def register_in_service(self):
+        print("before wait")
+        rospy.wait_for_service("/robot_names")
+        print("after wait")
+        proxy = rospy.ServiceProxy("/robot_names", RobotNames)
+
+        name = rospy.get_namespace()[:-1]
+        resp = proxy(name)
+
+    '''
+    Callback for custom message from leader
+    '''
+    def vertex_msg_callback(self, msg):
+        if(msg.initiate == 1):
+            # Leader sent message to initiate behavior
+            # Stop what I was doing
+            print("received initiate msg")
+            self.stop()
+
+    '''
+    Get my position from odom and save it
+    '''
+    def my_pose_callback(self, msg):
+        #print("in my_pose_callback")
+        self.my_position = msg.pose.pose
+
+    '''
+    Publish my initial position, which is hardcoded 
+    '''
+    def publish_initial_position(self):
+        #initial_pub = rospy.Publisher("/initialpose", PoseWithCovarianceStamped, queue_size=1)
+        pose_msg = PoseWithCovarianceStamped()
+        pose_msg.pose.pose.position.x = 0.0
+        pose_msg.pose.pose.position.y = 0.0
+        pose_msg.pose.pose.position.z = 0.0
+        pose_msg.pose.pose.orientation.x = 0.0
+        pose_msg.pose.pose.orientation.y = 0.0
+        pose_msg.pose.pose.orientation.z = 0.0
+        pose_msg.pose.pose.orientation.w= 1.0
+        if(self.my_num == 1):
+            initial_pub = rospy.Publisher("/robot_1/initialpose", PoseWithCovarianceStamped, queue_size=1)
+            pose_msg.pose.pose.position.y = 2.0
+        elif(self.my_num == 2):
+            initial_pub = rospy.Publisher("/robot_2/initialpose", PoseWithCovarianceStamped, queue_size=1)
+            pose_msg.pose.pose.position.y = 4.0
+        elif(self.my_num == 3):
+            initial_pub = rospy.Publisher("/robot_3/initialpose", PoseWithCovarianceStamped, queue_size=1)
+            pose_msg.pose.pose.position.y = 6.0
+        elif(self.my_num == 4):
+            initial_pub = rospy.Publisher("/robot_4/initialpose", PoseWithCovarianceStamped, queue_size=1)
+            pose_msg.pose.pose.position.y = 8.0
+        elif(self.my_num == 5):
+            initial_pub = rospy.Publisher("/robot_5/initialpose", PoseWithCovarianceStamped, queue_size=1)
+            pose_msg.pose.pose.position.x = 2.0
+        elif(self.my_num == 6):
+            initial_pub = rospy.Publisher("/robot_6/initialpose", PoseWithCovarianceStamped, queue_size=1)
+            pose_msg.pose.pose.position.x = 4.0
+        elif(self.my_num == 7):
+            initial_pub = rospy.Publisher("/robot_7/initialpose", PoseWithCovarianceStamped, queue_size=1)
+            pose_msg.pose.pose.position.x = 6.0
+        elif(self.my_num == 8):
+            initial_pub = rospy.Publisher("/robot_8/initialpose", PoseWithCovarianceStamped, queue_size=1)
+            pose_msg.pose.pose.position.x = 8.0
+        elif(self.my_num == 9):
+            initial_pub = rospy.Publisher("/robot_9/initialpose", PoseWithCovarianceStamped, queue_size=1)
+            pose_msg.pose.pose.position.x = 8.0
+            pose_msg.pose.pose.position.y = 8.0
+
+
+        rospy.sleep(1)
+        initial_pub.publish(pose_msg)
+        print("sent initialpose")
+
+
+    ############################ MOVEMENT ############################
+
+    '''
+    Calculates rotation and distance needed to move robot to goal
+    '''
+    def go_to_coord(self, goal_coord):
+        my_coord = [self.my_position.position.x, self.my_position.position.y]
+        print("my_coord = " + str(my_coord))
+        print("goal_coord = " + str(goal_coord))
+        quaternion = [self.my_position.orientation.x, self.my_position.orientation.y, self.my_position.orientation.z, self.my_position.orientation.w]
+        (roll, pitch, yaw) = tf.transformations.euler_from_quaternion(quaternion)
+        my_direction = yaw
+        print("my_direction = " + str(my_direction))
+
+        vector_to_goal = [goal_coord[0] - self.my_position.position.x, goal_coord[1] - self.my_position.position.y]
+        direction_to_goal = math.atan2(vector_to_goal[1], vector_to_goal[0])
+        print("direction_to_goal = " + str(direction_to_goal))
+
+        rotate_angle = direction_to_goal - my_direction
+
+        distance = self.euclidian_distance_coords(goal_coord, my_coord)
+
+        print("rotate_angle = " + str(rotate_angle))
+        self.rotate_in_place(rotate_angle)
+        self.move_forward(distance)
+
+    '''
+    Calculates euclidian distance of two pairs of coords
+    '''
+    def euclidian_distance_coords(self, coord1, coord2):
+        dist = math.sqrt((coord1[0] - coord2[0]) * (coord1[0] - coord2[0]) + (coord1[1] - coord2[1]) * (coord1[1] - coord2[1]))
+        return dist
+
+    '''
+    Rotate in place given angle
+    '''
+    def rotate_in_place(self, rotation_angle):
+        twist_msg = Twist()
+        if(rotation_angle > 0):
+            twist_msg.angular.z = ANGULAR_VELOCITY
+        else:
+            twist_msg.angular.z = -ANGULAR_VELOCITY
+        
+        duration = abs(rotation_angle / twist_msg.angular.z)
+        start_time = rospy.get_rostime()
+        rate = rospy.Rate(FREQUENCY)
+        while not rospy.is_shutdown():
+            # Check if done
+            if rospy.get_rostime() - start_time >= rospy.Duration(duration):
+                break
+                
+            # Publish message.
+            self._cmd_pub.publish(twist_msg)
+            
+            # Sleep to keep the set frequency.
+            rate.sleep()
+
+        # Rotated the required angle, stop.
+        self.stop()
+
+    '''
+    Move forward given distance
+    '''
+    def move_forward(self, distance):
+        # Rate at which to operate the while loop.
+        rate = rospy.Rate(FREQUENCY)
+
+        # Setting velocities. 
+        twist_msg = Twist()
+        twist_msg.linear.x = LINEAR_VELOCITY
+        start_time = rospy.get_rostime()
+        duration = rospy.Duration(distance/twist_msg.linear.x)
+
+        # Loop.
+        while not rospy.is_shutdown():
+            # Check if traveled of given distance based on time.
+            if rospy.get_rostime() - start_time >= duration:
+                break
+
+            self._cmd_pub.publish(twist_msg)
+
+            # Sleep to keep the set publishing frequency.
+            rate.sleep()
+
+        # Traveled the required distance, stop.
+        self.stop()
+
+    def stop(self):
+        """Stop the robot."""
+        twist_msg = Twist()
+        self._cmd_pub.publish(twist_msg)
+
+
+    ############################ SERVICE ############################
+        
+    def init_waypoint_service(self):
+        s = rospy.Service(self.my_name + 'waypoint_service', Waypoint, self.handle_waypoint)
+        print("waypoint_service server ready")
+
+    def handle_waypoint(self, req):
+        print("in handle_waypoint, x = " + str(req.x))
+        my_x = self.my_position.position.x 
+        my_y = self.my_position.position.y
+        my_coord = [my_x, my_y]
+        waypoint_coord = [req.x, req.y]
+
+        distance = self.euclidian_distance_coords(my_coord, waypoint_coord)
+        return WaypointResponse(dist=distance)
+
+    ############################ ACTION ############################
+
+    '''
+    Create server for my action
+    '''
+    def init_action_server(self):
+        self._as = actionlib.SimpleActionServer("/vertex_action_server" + self.my_name[:-1], vertexaction.vertexAction, execute_cb=self.execute_cb, auto_start = False)
+        self._as.start()
+
+    '''
+    Callback for when my action server gets a goal
+    '''
+    def execute_cb(self, goal):
+        self._feedback.sequence = []
+        print("In action, received goal")
+
+        goal_coord = [goal.x, goal.y]
+
+        # Call function to move to goal
+        self.go_to_coord(goal_coord)
+
+        self._result.done = 1
+        self._as.set_succeeded(self._result)
+
+
+def main():
+    """Main function."""
+
+    # 1st. initialization of node.
+    rospy.init_node("follower")
+
+    # Sleep for a few seconds to wait for the registration.
+    rospy.sleep(2)
+
+    follower = Follower()
+
+    # Robot moves 1 m forward, rotate of 180 degrees, and moves 1 m forward.
+    try:
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        rospy.logerr("ROS node interrupted.")
+
+
+if __name__ == "__main__":
+    """Run the main function."""
+    main()

@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+#The line above is important so that this file is interpreted with Python when running it.
+
+# Import of python modules.
+import math # use of pi.
+import tf
+import random
+
+# import of relevant libraries.
+import rospy # module for ROS APIs
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
+
+ENVIRONMENT_SIZE = 10
+MIN_WAYPOINT_DISTANCE = 1
+
+'''
+Publish randomly generated waypoints to /waypoints topic
+'''
+def publish_rand_waypoints(num_points, com_dist):
+    pub = rospy.Publisher("/waypoints", Path, queue_size=1)
+
+    # Generate random waypoints
+    path_msg = generate_rand_waypoints(num_points, com_dist)
+
+    # Constantly publish the waypoints
+    while(True):
+        pub.publish(path_msg)
+        rospy.sleep(1)
+
+'''
+Function to randomly generate num_waypoints waypoints and to make sure 
+that they are not too close to eachother
+'''
+def generate_rand_waypoints(num_waypoints, com_dist):
+    # Generate random coords
+    points = [] 
+    while(len(points) < num_waypoints):
+        x = random.random() * ENVIRONMENT_SIZE
+        y = random.random() * ENVIRONMENT_SIZE
+        new_point = [x,y]
+
+        # Check if its too close to other waypoints
+        if(len(points) == 0):
+            # If this is the first waypoint, don't need to check
+            points.append(new_point)
+        else:
+            # For all other waypoints, if this waypoint is within MIN_DISTANCE,
+            # continue without adding it to points
+            is_connected = False
+            for point in points:
+                dist = euclidian_distance_coords(new_point, point)
+                if(dist <= MIN_WAYPOINT_DISTANCE):
+                    continue
+                # Only add if waypoint is connected in the graph 
+                if(dist <= com_dist):
+                    is_connected = True
+
+            if(is_connected):
+                points.append(new_point)
+
+    print(points)
+
+    # Create path msg
+    path_msg = Path()
+    path_msg.header.frame_id = "map"
+    path_msg.header.stamp = rospy.Time.now()
+    for point in points:
+        pose = PoseStamped()
+        pose.pose.position.x = point[0]
+        pose.pose.position.y = point[1]
+        path_msg.poses.append(pose)
+
+    return path_msg
+
+
+def euclidian_distance_coords(coord1, coord2):
+    dist = math.sqrt((coord1[0] - coord2[0]) * (coord1[0] - coord2[0]) + (coord1[1] - coord2[1]) * (coord1[1] - coord2[1]))
+    return dist
+
+if __name__ == "__main__":
+    """Run the main function."""
+    num_points = rospy.get_param("/num_points")
+    com_dist = rospy.get_param("/com_dist")
+    rospy.init_node("rand_waypoints")
+    publish_rand_waypoints(num_points, com_dist)
+    rospy.spin()

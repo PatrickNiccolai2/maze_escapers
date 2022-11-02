@@ -1,0 +1,484 @@
+#!/usr/bin/env python
+#The line above is important so that this file is interpreted with Python when running it.
+
+# Import of python modules.
+import math # use of pi.
+import tf
+import copy
+import networkx as nx
+import random
+
+from networkx.algorithms import approximation as nx_appx
+
+# import of relevant libraries.
+import rospy # module for ROS APIs
+from geometry_msgs.msg import Twist # message type for cmd_vel
+from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PointStamped
+from sensor_msgs.msg import LaserScan # message type for scan
+from nav_msgs.msg import Odometry
+from nav_msgs.msg import Path
+from auctions.msg import RobotVertex
+from auctions.srv import RobotNames, RobotNamesResponse
+from auctions.srv import Waypoint, WaypointResponse
+import actionlib
+import auctions.msg._VertexGoal as vertexgoal
+import auctions.msg._VertexAction as vertexaction
+
+# Constants.
+FREQUENCY = 10 #Hz.
+LINEAR_VELOCITY = 0.2 # m/s
+ANGULAR_VELOCITY = math.pi/4 # rad/s
+LASER_ANGLE_FRONT = 0 # radians
+MIN_THRESHOLD_DISTANCE = 0.5 # m, threshold distance.
+DEFAULT_CMD_VEL_TOPIC = 'cmd_vel'
+DEFAULT_SCAN_TOPIC = 'scan'
+
+class Leader():
+    follower_names = []
+    def __init__(self, num_robots, num_points, com_dist, num_terms):
+        self.follower_names = ["/robot_0"]
+        self.num_robots = num_robots
+        self.num_points = num_points
+        self.com_dist = com_dist
+        self.num_terminals = num_terms
+
+        # Array to keep track of waypoints
+        self.waypoints = [0 for i in range(num_points)]
+
+        self.necessary_waypoints = []
+
+        # Store message of waypoints, used to check if a received message has different waypoints
+        self.old_waypoints_msg = None
+
+        # Subscriber to get waypoints from command line message
+        rospy.Subscriber("/waypoints", Path, self.waypoints_callback)
+        print(self.waypoints)
+
+        # Array to keep track of followers positions, in their reference frames
+        self.follower_positions = {}
+
+        # Callbacks for odoms
+        rospy.Subscriber("/robot_0/odom", Odometry, self.my_odom_callback)
+
+        self._cmd_pub = rospy.Publisher("/robot_0/cmd_vel", Twist, queue_size=1)
+
+        # Init the service to get followers names
+        self.robot_names_server()
+
+        # Dictionary to map robot names to their assigned waypoint
+        self.assigned_waypoints = {}
+        self.assigned_waypoints_dict = {}
+
+        # Dictionary to keep track of transformations from followers reference frame to world
+        self.follower_translations = {}
+        self.follower_translations["/robot_0"] = [0,0]
+
+        # Publish my initial position
+        self.publish_initial_position()
+
+        # Get the transforms from followers
+        self.get_transforms()
+        print(self.follower_translations)
+
+        self.make_shape()
+        
+    '''
+    Function to control the process of assigning and moving robots
+    '''
+    def make_shape(self):
+        # Assign waypoints to robots
+        self.start_auction_with_removal()
+        print("after auction, assigned_waypoints_dict:")
+        print(self.assigned_waypoints_dict)
+
+        self.send_all_goals()
+
+
+    def send_all_goals(self): 
+        for robot_name in self.follower_names:
+            if(robot_name == "/robot_0"):
+                for waypoint in self.assigned_waypoints_dict[robot_name]:
+                    goal_x = waypoint[0]
+                    goal_y = waypoint[1]
+                    goal_coord = [goal_x, goal_y]
+                    self.move_leader_to_goals(goal_coord)
+            else:
+                for waypoint in self.assigned_waypoints_dict[robot_name]:
+                    goal_x = waypoint[0]
+                    goal_y = waypoint[1]
+                    goal = vertexgoal.vertexGoal(x=goal_x, y=goal_y)
+                    action_client = actionlib.SimpleActionClient("/vertex_action_server" + robot_name, vertexaction.vertexAction)
+                    action_client.wait_for_server()
+
+                    action_client.send_goal(goal)
+
+                    action_client.wait_for_result()
+
+        print("done")
+
+
+    '''
+    Send msg to follower so they are ready
+    '''
+    def send_initiate_msg(self):
+        vertex_msg = RobotVertex()
+        vertex_msg.initiate = 1
+
+        self.vertex_pub = rospy.Publisher("/vertex_topic", RobotVertex, queue_size=2)
+
+        #while(True):
+        self.vertex_pub.publish(vertex_msg)
+        print("sent msgs")
+
+    '''
+    Publish leaders initial position, which is hardcoded to be 0,0
+    '''
+    def publish_initial_position(self):
+        initial_pub = rospy.Publisher("/robot_0/initialpose", PoseWithCovarianceStamped, queue_size=10)
+        pose_msg = PoseWithCovarianceStamped()
+        pose_msg.pose.pose.position.x = 0.0
+        pose_msg.pose.pose.position.y = 0.0
+        pose_msg.pose.pose.position.z = 0.0
+        pose_msg.pose.pose.orientation.x = 0.0
+        pose_msg.pose.pose.orientation.y = 0.0
+        pose_msg.pose.pose.orientation.z = 0.0
+        pose_msg.pose.pose.orientation.w= 1.0
+
+        #while(True):
+        rospy.sleep(1)
+        initial_pub.publish(pose_msg)
+        print("sent initialpose")
+        #    rospy.sleep(1)
+
+    '''
+    Listen to tf_broadcaster and save transformations
+    '''
+    def get_transforms(self):
+        tf_listener = tf.TransformListener()
+        translate = 0
+        rotate=0
+        # Iterate through followers
+        #for i in range(self.num_robots-1):
+        for i in range(self.num_robots):
+            while not rospy.is_shutdown():
+                try:
+                    # Get tranformation from follower to world
+                    (translate,rotate) = tf_listener.lookupTransform(self.follower_names[i], '/world', rospy.Time(0))
+                    break
+                except Exception as e:
+                    #print(e)
+                    continue
+                rospy.sleep(1)
+
+            # Add translation to dictionary, mapped to follower's name
+            self.follower_translations[self.follower_names[i]] = translate
+
+    '''
+    Apply given transformation to given coord
+    world_coord is list of two floats
+    '''
+    def apply_transformation(self, world_coord, translate):
+        frame_coord = list(copy.deepcopy(world_coord))
+        frame_coord[0] += translate[0]
+        frame_coord[1] += translate[1]
+        return tuple(frame_coord)
+
+        '''
+        t = tf.TransformerROS()
+
+        point_msg = PointStamped()
+        point_msg.point.x = world_coord.position.x
+        point_msg.point.y = world_coord.position.x
+        point_msg.point.z = 0.0
+
+        print("about to apply_transformation")
+
+        while(not rospy.is_shutdown()):
+            try:
+                transformed_point = t.transformPoint("/robot_1", point_msg)
+                break
+            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                continue
+
+        frame_coord = [transformed_point.point.x, transformed_point.point.y]
+        return frame_coord
+        '''
+
+    '''
+    Euclidean distance between two poses
+    '''
+    def euclidian_distance(self, position1, position2):
+        dist = math.sqrt((position1.position.x - position2.position.x) * (position1.position.x - position2.position.x) + (position1.position.y - position2.position.y) * (position1.position.y - position2.position.y))
+        return dist
+
+    '''
+    Block until all robot names are registered
+    '''
+    def block_until_names(self):
+        print("blocking until all followers are registered")
+        #while(len(self.follower_names) < self.num_robots-1):
+        while(len(self.follower_names) < self.num_robots):
+            continue
+        print("got all names")
+
+    def my_odom_callback(self,msg):
+        self.my_position = msg.pose.pose
+
+    def waypoints_callback(self,msg):
+        #print(msg.poses)
+        for i in range(self.num_points):
+            self.waypoints[i] = msg.poses[i].pose
+
+        if(self.old_waypoints_msg == None or msg.poses != self.old_waypoints_msg.poses):
+            # This message contains new waypoints
+            self.old_waypoints_msg = msg 
+            self.send_initiate_msg()
+            self.steiner_tree()
+
+    ############################ STEINER TREE ############################
+
+    def steiner_tree(self):
+        self.block_until_names()
+        print("In steiner_tree")
+        G = nx.Graph()
+
+        waypoint_coords = []
+        for point in self.waypoints:
+            waypoint_coords.append([point.position.x, point.position.y])
+
+        for point in waypoint_coords:
+            G.add_node(tuple(point))
+
+        for point in waypoint_coords:
+            for other_point in waypoint_coords:
+                if(point != other_point):
+                    dist = self.euclidian_distance_coords(point, other_point)
+                    if(dist <= self.com_dist):
+                        G.add_edge(tuple(point), tuple(other_point))
+
+        # Randomly choose terminal nodes
+        terminals = random.sample(waypoint_coords, self.num_terminals)
+
+        # Convert terminals to tuple
+        terminal_tuples = []
+        for terminal in terminals:
+            terminal_tuples.append(tuple(terminal))
+
+        st = nx_appx.steiner_tree(G, terminal_tuples)
+        print("Steiner tree nodes:")
+        print(st.nodes())
+        self.necessary_waypoints = st.nodes()
+
+        self.make_shape()
+
+    ############################ AUCTION ############################
+
+    '''
+    Auction function. The leader will create service proxy for two followers 
+    and then for each waypoint, use the service proxy to get each followers
+    distance to that waypoint and then use the distances to assign waypoints
+
+    '''
+    def start_auction_with_removal(self):
+        rospy.sleep(2)
+        print("In auction")
+        print(self.follower_names)
+
+        # For each robot, initiliaze its assignements as empty list
+        for robot_name in self.follower_names:
+            self.assigned_waypoints_dict[robot_name] = []
+
+        unassigned_robot_names = copy.deepcopy(self.follower_names)
+
+        # Iterate through each waypoint
+        for waypoint in self.necessary_waypoints:
+            waypoint_x = waypoint[0]
+            waypoint_y = waypoint[1]
+            waypoint_coord = [waypoint_x, waypoint_y]
+
+            min_dist = float("inf")
+            min_name = ""
+
+
+            # Iterate through each robot
+            for robot_name in unassigned_robot_names:
+                if(robot_name == "/robot_0"):
+                    # We are robot_0, so we can manually get distance
+                    my_coord = [self.my_position.position.x, self.my_position.position.y]
+                    dist = self.euclidian_distance_coords(my_coord, waypoint_coord)
+                else:
+                    # For other robots, create proxy for that robots service
+                    robot_server = robot_name + "/waypoint_service"
+                    rospy.wait_for_service(robot_server)
+                    robot_proxy = rospy.ServiceProxy(robot_server, Waypoint)
+
+                    # Apply the robots transformation
+                    robot_translation = self.follower_translations[robot_name]
+                    #transformed_waypoint = self.apply_transformation(waypoint, robot_translation)
+                        
+                    # actually don't transform because stage uses world already
+                    transformed_waypoint = waypoint
+                    
+                    # Use service proxy to get distance
+                    resp = robot_proxy(x=transformed_waypoint[0], y=transformed_waypoint[1])
+                    dist = resp.dist 
+
+                # Update min distance if necessary
+                if(dist < min_dist):
+                    min_dist = dist
+                    min_name = robot_name
+
+            # We found robot with min distance, add this waypoint to their assignments
+            self.assigned_waypoints_dict[min_name].append(waypoint)
+            unassigned_robot_names.remove(min_name)
+
+
+    ############################ MOVEMENT ############################
+
+    def move_leader_to_goals(self, goal_coord):
+        self.go_to_coord(goal_coord)
+
+    '''
+    Function to start the process of moving leader to its goal
+    '''
+    '''
+    def move_leader_to_goal(self):
+        # Get coords of goal assigned to leader
+        goal_coord = [self.assigned_waypoints["/robot_0"].position.x, self.assigned_waypoints["/robot_0"].position.y]
+        self.go_to_coord(goal_coord)
+    '''
+
+    '''
+    Calculates rotation and distance needed to move robot to goal
+    '''
+    def go_to_coord(self, goal_coord):
+        my_coord = [self.my_position.position.x, self.my_position.position.y]
+        print("my_coord = " + str(my_coord))
+        print("goal_coord = " + str(goal_coord))
+        quaternion = [self.my_position.orientation.x, self.my_position.orientation.y, self.my_position.orientation.z, self.my_position.orientation.w]
+        (roll, pitch, yaw) = tf.transformations.euler_from_quaternion(quaternion)
+        my_direction = yaw
+        print("my_direction = " + str(my_direction))
+
+        vector_to_goal = [goal_coord[0] - self.my_position.position.x, goal_coord[1] - self.my_position.position.y]
+        direction_to_goal = math.atan2(vector_to_goal[1], vector_to_goal[0])
+        print("direction_to_goal = " + str(direction_to_goal))
+
+        rotate_angle = direction_to_goal - my_direction
+
+        distance = self.euclidian_distance_coords(goal_coord, my_coord)
+
+        print("rotate_angle = " + str(rotate_angle))
+        self.rotate_in_place(rotate_angle)
+        self.move_forward(distance)
+
+    '''
+    Calculates euclidian distance of two pairs of coords
+    '''
+    def euclidian_distance_coords(self, coord1, coord2):
+        dist = math.sqrt(((coord1[0] - coord2[0]) ** 2) + ((coord1[1] - coord2[1]) ** 2))
+        return dist
+
+    '''
+    Rotate in place given angle
+    '''
+    def rotate_in_place(self, rotation_angle):
+        twist_msg = Twist()
+        if(rotation_angle > 0):
+            twist_msg.angular.z = ANGULAR_VELOCITY
+        else:
+            twist_msg.angular.z = -ANGULAR_VELOCITY
+        
+        duration = abs(rotation_angle / twist_msg.angular.z)
+        start_time = rospy.get_rostime()
+        rate = rospy.Rate(FREQUENCY)
+        while not rospy.is_shutdown():
+            # Check if done
+            if rospy.get_rostime() - start_time >= rospy.Duration(duration):
+                break
+                
+            # Publish message.
+            self._cmd_pub.publish(twist_msg)
+            
+            # Sleep to keep the set frequency.
+            rate.sleep()
+
+        # Rotated the required angle, stop.
+        self.stop()
+
+    '''
+    Move forward given distance
+    '''
+    def move_forward(self, distance):
+        # Rate at which to operate the while loop.
+        rate = rospy.Rate(FREQUENCY)
+
+        # Setting velocities. 
+        twist_msg = Twist()
+        twist_msg.linear.x = LINEAR_VELOCITY
+        start_time = rospy.get_rostime()
+        duration = rospy.Duration(distance/twist_msg.linear.x)
+
+        # Loop.
+        while not rospy.is_shutdown():
+            # Check if traveled of given distance based on time.
+            if rospy.get_rostime() - start_time >= duration:
+                break
+
+            self._cmd_pub.publish(twist_msg)
+
+            # Sleep to keep the set publishing frequency.
+            rate.sleep()
+
+        # Traveled the required distance, stop.
+        self.stop()
+
+    def stop(self):
+        """Stop the robot."""
+        twist_msg = Twist()
+        self._cmd_pub.publish(twist_msg)
+        
+
+    ############################ SERVICE ############################
+
+    def handle_add_name(self, req):
+        # Register a new name
+        print("Registering name " + req.in_name)
+        if(req.in_name not in self.follower_names):
+            self.follower_names.append(req.in_name)
+
+        return RobotNamesResponse(req.in_name)
+
+    def robot_names_server(self):
+        #rospy.init_node('robot_names_server')
+        s = rospy.Service('/robot_names', RobotNames, self.handle_add_name)
+        print("Names server ready")
+        #rospy.spin()
+
+def main():
+    """Main function."""
+
+    # 1st. initialization of node.
+    rospy.init_node("leader")
+
+    # Sleep for a few seconds to wait for the registration.
+    rospy.sleep(2)
+
+    # Initialization of the class for the simple motion.
+    num_robots = rospy.get_param("/num_robots")
+    num_points = rospy.get_param("/num_points")
+    com_dist = rospy.get_param("/com_dist")
+    num_terms = rospy.get_param("/num_terms")
+    leader = Leader(num_robots, num_points, com_dist, num_terms)
+
+    # Robot moves 1 m forward, rotate of 180 degrees, and moves 1 m forward.
+    try:
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        rospy.logerr("ROS node interrupted.")
+
+
+if __name__ == "__main__":
+    """Run the main function."""
+    main()
