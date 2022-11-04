@@ -34,9 +34,6 @@ class Explorer():
         resp = add_proxy(1,1)
         print(resp)
 
-        neighbor_proxy = rospy.ServiceProxy("/neighbor_service", Neighbors)
-        resp = neighbor_proxy(1,1)
-        print(resp)
 
 def main():
     """Main function."""
