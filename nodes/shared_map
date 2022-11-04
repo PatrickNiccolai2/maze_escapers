@@ -7,15 +7,11 @@ import tf
 
 # import of relevant libraries.
 import rospy # module for ROS APIs
-from geometry_msgs.msg import Twist # message type for cmd_vel
-from geometry_msgs.msg import PoseWithCovarianceStamped
-from sensor_msgs.msg import LaserScan # message type for scan
-from nav_msgs.msg import Odometry
+
 from maze_escapers.srv import Neighbors, NeighborsResponse
 from maze_escapers.srv import AddToMap, AddToMapResponse
 
 from maze_escapers.maze_reader import MazeReader
-
 
 
 class SharedMap():
@@ -50,7 +46,7 @@ class SharedMap():
     '''
     def update_frontier(self, new_vertex):
         neighbors = self.get_neighbors(new_vertex)
-        print(neighbors)
+
         for neighbor in neighbors:
             if(neighbor not in self.known_vertices and neighbor not in self.frontier):
                 self.frontier.append(neighbor)

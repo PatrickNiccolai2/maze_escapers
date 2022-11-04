@@ -32,6 +32,8 @@ class Explorer():
 
         add_proxy = rospy.ServiceProxy("/add_to_map_service", AddToMap)
         resp = add_proxy(1,1)
+
+        resp = add_proxy(1,3)
         print(resp)
 
 
