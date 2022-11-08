@@ -40,6 +40,7 @@ add_message_files(
    Waypoint.srv
    Neighbors.srv
    AddToMap.srv
+   ExplorerBid.srv
 )
 
 add_action_files(

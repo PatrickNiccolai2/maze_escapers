@@ -10,6 +10,7 @@ import rospy # module for ROS APIs
 
 from maze_escapers.srv import Neighbors, NeighborsResponse
 from maze_escapers.srv import AddToMap, AddToMapResponse
+from maze_escapers.srv import ExplorerBid, ExplorerBidResponse
 
 from maze_escapers.maze_reader import MazeReader
 
@@ -21,6 +22,9 @@ class SharedMap():
         self.known_edges = []
         self.init_neighbors_service()
         self.init_add_to_map_service()
+
+        # Probably need to do something better for this
+        self.robot_names = ["/robot_0"]
 
     '''
     Use maze_reader.py to generate a graph of a given maze image, specified
@@ -54,6 +58,8 @@ class SharedMap():
         print("new frontier")
         print(self.frontier)
 
+        self.start_patrick_auction()
+
     '''
     Get the neighbors of a given vertex, looking at the whole maze
     '''
@@ -67,6 +73,23 @@ class SharedMap():
                 neighbors.append(edge[0])
 
         return neighbors
+
+    ############################## AUCTION ##############################
+
+    def start_patrick_auction(self):
+        print("In auction")
+
+        for robot_name in self.robot_names:
+            # For each robot, reate proxy for that robots service
+            bid_server = robot_name + "/bid_service"
+            rospy.wait_for_service(bid_server)
+            print("After wait for bid service")
+            bid_proxy = rospy.ServiceProxy(bid_server, ExplorerBid)
+            for frontier_node in self.frontier:
+                resp = bid_proxy(x=frontier_node[0], y=frontier_node[1])
+                bid = resp.bid 
+                print(bid)
+
 
     ############################## SERVICES ##############################
 
