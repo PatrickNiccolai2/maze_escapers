@@ -58,8 +58,8 @@ class Explorer():
         my_coord = [self.my_position.position.x, self.my_position.position.y]
         req_coord = [req.x, req.y]
 
-        my_dist = self.euclidian_distance_coords(my_coord, req_coord)
-        point_to_start_dist = self.euclidian_distance_coords(self.start_coord, req_coord)
+        my_dist = self.manhattan_distance_coords(my_coord, req_coord)
+        point_to_start_dist = self.manhattan_distance_coords(self.start_coord, req_coord)
 
         my_bid = my_dist + point_to_start_dist
         return ExplorerBidResponse(bid=my_bid)
@@ -79,6 +79,14 @@ class Explorer():
     def euclidian_distance_coords(self, coord1, coord2):
         dist = math.sqrt((coord1[0] - coord2[0]) * (coord1[0] - coord2[0]) + (coord1[1] - coord2[1]) * (coord1[1] - coord2[1]))
         return dist
+
+    '''
+    Calculates manhattan distance of two pairs of coords
+    '''
+    def manhattan_distance_coords(self, coord1, coord2):
+        dist = math.sqrt(abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1]))
+        return dist
+
 
 
 def main():
