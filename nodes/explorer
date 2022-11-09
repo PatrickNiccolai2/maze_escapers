@@ -14,6 +14,7 @@ from nav_msgs.msg import Odometry
 from maze_escapers.srv import Neighbors, NeighborsResponse
 from maze_escapers.srv import AddToMap, AddToMapResponse
 from maze_escapers.srv import ExplorerBid, ExplorerBidResponse
+from maze_escapers.srv import Assignment, AssignmentResponse
 
 # Constants.
 FREQUENCY = 10 #Hz.
@@ -35,14 +36,15 @@ class Explorer():
         rospy.sleep(2)
 
         print("before wait")
-        rospy.wait_for_service("/neighbor_service")
         rospy.wait_for_service("/add_to_map_service")
         print("after wait")
 
         self.init_auction_service()
+        self.init_assignment_service()
 
-        add_proxy = rospy.ServiceProxy("/add_to_map_service", AddToMap)
-        resp = add_proxy(1,1)
+        if(self.my_name == "/robot_0/"):
+            add_proxy = rospy.ServiceProxy("/add_to_map_service", AddToMap)
+            resp = add_proxy(1,1)
 
         #resp = add_proxy(1,3)
         #print(resp)
@@ -56,6 +58,7 @@ class Explorer():
     def handle_bid(self, req):
         print("In handle_bid, req = " + str(req))
         my_coord = [self.my_position.position.x, self.my_position.position.y]
+        print(my_coord)
         req_coord = [req.x, req.y]
 
         my_dist = self.manhattan_distance_coords(my_coord, req_coord)
@@ -63,6 +66,16 @@ class Explorer():
 
         my_bid = my_dist + point_to_start_dist
         return ExplorerBidResponse(bid=my_bid)
+
+    ############################## ASSIGNMENT SERVICE ##############################
+
+    def init_assignment_service(self):
+        s = rospy.Service(self.my_name + "assignment_service", Assignment, self.handle_assignment)
+        print("assignment_service server ready")
+
+    def handle_assignment(self, req):
+        print("in handle_assignment, req = " + str(req))
+        return AssignmentResponse(response=1)
 
     ############################## UTILITY FUNCTIONS ##############################
 

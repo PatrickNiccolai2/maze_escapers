@@ -8,9 +8,9 @@ import tf
 # import of relevant libraries.
 import rospy # module for ROS APIs
 
-from maze_escapers.srv import Neighbors, NeighborsResponse
 from maze_escapers.srv import AddToMap, AddToMapResponse
 from maze_escapers.srv import ExplorerBid, ExplorerBidResponse
+from maze_escapers.srv import Assignment, AssignmentResponse
 
 from maze_escapers.maze_reader import MazeReader
 
@@ -20,11 +20,10 @@ class SharedMap():
         self.get_whole_graph()
         self.known_vertices = []
         self.known_edges = []
-        self.init_neighbors_service()
         self.init_add_to_map_service()
 
         # Probably need to do something better for this
-        self.robot_names = ["/robot_0"]
+        self.robot_names = ["/robot_0", "/robot_1"]
 
     '''
     Use maze_reader.py to generate a graph of a given maze image, specified
@@ -36,10 +35,12 @@ class SharedMap():
         filename = "/root/catkin_ws/src/maze_escapers/medmaze2.png"
         maze_reader = MazeReader(filename)
         self.whole_graph_vertices, self.whole_graph_edges = maze_reader.get_graph_representation()
+        '''
         print("Vertices")
         print(self.whole_graph_vertices)
         print("Edges")
         print(self.whole_graph_edges)
+        '''
 
         # Init frontier as empty list
         self.frontier = []
@@ -78,8 +79,11 @@ class SharedMap():
 
     def start_patrick_auction(self):
         print("In auction")
-
+        print("frontier = " + str(self.frontier))
+        bids_dict = {}
         for robot_name in self.robot_names:
+            print("Getting bids for " + robot_name)
+            bids_dict[robot_name] = {}
             # For each robot, reate proxy for that robots service
             bid_server = robot_name + "/bid_service"
             rospy.wait_for_service(bid_server)
@@ -88,38 +92,41 @@ class SharedMap():
             for frontier_node in self.frontier:
                 resp = bid_proxy(x=frontier_node[0], y=frontier_node[1])
                 bid = resp.bid 
-                print(bid)
+                bids_dict[robot_name][tuple(frontier_node)] = bid
+                #print(bid)
+
+        print(bids_dict)
+        assigned_vertices = []
+        assignments_dict = {}
+        for robot_name in bids_dict:
+            min_bid = 10000000
+            min_vertex = None 
+            for vertex in bids_dict[robot_name]:
+                bid_val = bids_dict[robot_name][vertex]
+                if(bid_val < min_bid and vertex not in assigned_vertices):
+                    min_bid = bid_val
+                    min_vertex = vertex
+            assignments_dict[robot_name] = min_vertex
+            assigned_vertices.append(min_vertex)
+
+        print(assignments_dict)
+
+        self.send_assignments(assignments_dict)
+
+    def send_assignments(self, assignments_dict):
+        for robot_name in self.robot_names:
+            print("sending goal to " + robot_name)
+            assignment_server = robot_name + "/assignment_service"
+            rospy.wait_for_service(assignment_server)
+            print("After wait for assignment service")
+            assigment_proxy = rospy.ServiceProxy(assignment_server, Assignment)
+
+            assignment = assignments_dict[robot_name]
+            resp = assigment_proxy(x=assignment[0], y=assignment[1])
+
 
 
     ############################## SERVICES ##############################
-
-    '''
-    init service that robots use to get the neighbors of a given vertex
-    '''
-    def init_neighbors_service(self):
-        s = rospy.Service('/neighbor_service', Neighbors, self.handle_neighbors_service_request)
-        print("neighbor_service server ready")
-
-    '''
-    Return list of neighbors of given vertex
-    '''
-    def handle_neighbors_service_request(self, req):
-        print("in handle_neighbors_service_request, req = " + str(req))
-        vertex = [req.x, req.y]
-        resp_arr = []
-
-        if(vertex in self.known_vertices):
-            for edge in self.whole_graph_edges:
-                if(edge[0] == vertex):
-                    resp_arr.append(edge[1][0])
-                    resp_arr.append(edge[1][1])
-                elif(edge[1] == vertex):
-                    resp_arr.append(edge[0][0])
-                    resp_arr.append(edge[0][1])
-
-        resp = NeighborsResponse()
-        resp.neighbors = resp_arr
-        return resp
 
     '''
     init service robots use to add a vertex they discovered to the shared map

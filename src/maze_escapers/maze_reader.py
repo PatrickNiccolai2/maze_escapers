@@ -12,11 +12,12 @@ class MazeReader:
 		self.width = len(self.maze[0])
 
 		v,e = self.get_graph_representation()
-		
+		'''
 		print("New vertices")
 		print(v)
 		print("New edges")
 		print(e)
+		'''
 		
 
 	def get_graph_representation(self):

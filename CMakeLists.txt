@@ -37,7 +37,7 @@ add_message_files(
  add_service_files(
    FILES
    RobotNames.srv
-   Waypoint.srv
+   Assignment.srv
    Neighbors.srv
    AddToMap.srv
    ExplorerBid.srv
