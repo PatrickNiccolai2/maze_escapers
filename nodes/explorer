@@ -4,6 +4,7 @@
 # Import of python modules.
 import math # use of pi.
 import tf
+from collections import deque
 
 # import of relevant libraries.
 import rospy # module for ROS APIs

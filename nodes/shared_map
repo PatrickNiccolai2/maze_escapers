@@ -4,6 +4,7 @@
 # Import of python modules.
 import math # use of pi.
 import tf
+from collections import deque
 
 # import of relevant libraries.
 import rospy # module for ROS APIs
@@ -21,6 +22,7 @@ class SharedMap():
         # Probably need to do something better for this
         self.robot_names = ["/robot_0", "/robot_1"]
         self.ready_dict = {}
+        self.robot_last_vertex_dict = {"/robot_0":[1,1], "/robot_1":[1,1]}
 
         self.get_whole_graph()
         self.known_vertices = []
@@ -116,7 +118,19 @@ class SharedMap():
 
         print(assignments_dict)
 
-        self.send_assignments(assignments_dict)
+        self.get_path(assignments_dict)
+
+        #self.send_assignments(assignments_dict)
+
+    def get_path(self, assignments_dict):
+        robot_paths_dict = {}
+        for robot_name in assignments_dict:
+            start = self.robot_last_vertex_dict[robot_name]
+            goal = assignments_dict[robot_name]
+            path = self.bfs(tuple(start), tuple(goal))
+            robot_paths_dict[robot_name] = path 
+
+        print(robot_paths_dict)
 
     '''
     After the auction, send all assignments
@@ -205,6 +219,44 @@ class SharedMap():
 
         return ReadyResponse(response=1)
 
+    ############################## BFS ##############################
+
+    def bfs(self, start, goal):
+        bfs_dic = {}
+        path = []
+        goal_reached = False
+        bfs_dic[start] = None
+
+        bfs_frontier = deque()
+        bfs_frontier.append(start)
+
+        # In waves, the goal is searched for
+        while len(bfs_frontier) > 0:
+            v = bfs_frontier.popleft()
+            # Each adjacent vertex of start is searched
+            print("Searching " + str(v))
+            if v != None:
+                for each in self.get_neighbors(list(v)):
+                    print("Neighbor: " + str(each))
+                    each = tuple(each)
+                    # Determines if a vertex has already been searched
+                    if each in bfs_dic:
+                        pass
+                    else:
+                        bfs_frontier.append(each)
+                        bfs_dic[each] = v
+            # Breaks if goal has been found
+            if v == goal:
+                goal_reached = True
+                break
+        # If the goal has been found, the path list is created and returned
+        if goal_reached:
+            curr = goal
+            while curr != None:
+                path.append(curr)
+                curr = bfs_dic[curr]
+
+        return path
 
 def main():
     """Main function."""
