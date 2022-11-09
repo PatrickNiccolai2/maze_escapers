@@ -41,6 +41,7 @@ add_message_files(
    Neighbors.srv
    AddToMap.srv
    ExplorerBid.srv
+   Ready.srv
 )
 
 add_action_files(

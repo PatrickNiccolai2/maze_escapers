@@ -11,19 +11,22 @@ import rospy # module for ROS APIs
 from maze_escapers.srv import AddToMap, AddToMapResponse
 from maze_escapers.srv import ExplorerBid, ExplorerBidResponse
 from maze_escapers.srv import Assignment, AssignmentResponse
+from maze_escapers.srv import Ready, ReadyResponse
 
 from maze_escapers.maze_reader import MazeReader
 
 
 class SharedMap():
     def __init__(self):
+        # Probably need to do something better for this
+        self.robot_names = ["/robot_0", "/robot_1"]
+        self.ready_dict = {}
+
         self.get_whole_graph()
         self.known_vertices = []
         self.known_edges = []
         self.init_add_to_map_service()
-
-        # Probably need to do something better for this
-        self.robot_names = ["/robot_0", "/robot_1"]
+        self.init_ready_service()
 
     '''
     Use maze_reader.py to generate a graph of a given maze image, specified
@@ -59,8 +62,6 @@ class SharedMap():
         print("new frontier")
         print(self.frontier)
 
-        self.start_patrick_auction()
-
     '''
     Get the neighbors of a given vertex, looking at the whole maze
     '''
@@ -77,6 +78,10 @@ class SharedMap():
 
     ############################## AUCTION ##############################
 
+    '''
+    Auction to get bids from all robots for all vertices in frontier, then
+    assign 
+    '''
     def start_patrick_auction(self):
         print("In auction")
         print("frontier = " + str(self.frontier))
@@ -113,6 +118,9 @@ class SharedMap():
 
         self.send_assignments(assignments_dict)
 
+    '''
+    After the auction, send all assignments
+    '''
     def send_assignments(self, assignments_dict):
         for robot_name in self.robot_names:
             print("sending goal to " + robot_name)
@@ -124,6 +132,7 @@ class SharedMap():
             assignment = assignments_dict[robot_name]
             resp = assigment_proxy(x=assignment[0], y=assignment[1])
 
+            self.ready_dict[robot_name] = 0
 
 
     ############################## SERVICES ##############################
@@ -166,6 +175,35 @@ class SharedMap():
             return 1
         else:
             return -1 
+
+    '''
+    This service is used by robots to tell shared_map that they are ready
+    '''
+    def init_ready_service(self):
+        for robot_name in self.robot_names:
+            self.ready_dict[robot_name] = 0
+        s = rospy.Service('/ready_service', Ready, self.handle_ready)
+        print("ready_service server ready")
+
+    '''
+    req has the number of the robot that sent that it is ready
+    Update ready_dict for that robot to 1
+    '''
+    def handle_ready(self, req):
+        robot_name = "/robot_" + str(req.robot_num)
+        print(robot_name + " is ready")
+        self.ready_dict[robot_name] = 1
+        print(self.ready_dict)
+        
+        # Check if all robots are ready, if they are we can start a new auction
+        all_ready = True
+        for name in self.robot_names:
+            if(self.ready_dict[name] == 0):
+                all_ready = False
+        if(all_ready):
+            self.start_patrick_auction()
+
+        return ReadyResponse(response=1)
 
 
 def main():

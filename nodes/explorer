@@ -15,6 +15,7 @@ from maze_escapers.srv import Neighbors, NeighborsResponse
 from maze_escapers.srv import AddToMap, AddToMapResponse
 from maze_escapers.srv import ExplorerBid, ExplorerBidResponse
 from maze_escapers.srv import Assignment, AssignmentResponse
+from maze_escapers.srv import Ready, ReadyResponse
 
 # Constants.
 FREQUENCY = 10 #Hz.
@@ -28,6 +29,8 @@ DEFAULT_SCAN_TOPIC = 'scan'
 class Explorer():
     def __init__(self):
         self.my_name = rospy.get_namespace()
+        self.my_num = int(self.my_name[7:-1])
+        print(self.my_num)
 
         self.start_coord = [1,1]
 
@@ -42,15 +45,21 @@ class Explorer():
         self.init_auction_service()
         self.init_assignment_service()
 
+        # For testing
         if(self.my_name == "/robot_0/"):
             add_proxy = rospy.ServiceProxy("/add_to_map_service", AddToMap)
             resp = add_proxy(1,1)
 
+        self.send_ready()
         #resp = add_proxy(1,3)
         #print(resp)
 
     ############################## AUCTION SERVICE ##############################
 
+    '''
+    This service is used to receive a vertex from shared_map and then send
+    back my bid for that vertex
+    '''
     def init_auction_service(self):
         s = rospy.Service(self.my_name + 'bid_service', ExplorerBid, self.handle_bid)
         print("bid_service server ready")
@@ -69,6 +78,9 @@ class Explorer():
 
     ############################## ASSIGNMENT SERVICE ##############################
 
+    '''
+    This service is used to receive my assignment from shared_map
+    '''
     def init_assignment_service(self):
         s = rospy.Service(self.my_name + "assignment_service", Assignment, self.handle_assignment)
         print("assignment_service server ready")
@@ -78,6 +90,16 @@ class Explorer():
         return AssignmentResponse(response=1)
 
     ############################## UTILITY FUNCTIONS ##############################
+
+    '''
+    Tell shared_map that I am ready to be assigned a new vertex
+    '''
+    def send_ready(self):
+        ready_server = "/ready_service"
+        rospy.wait_for_service(ready_server)
+        ready_proxy = rospy.ServiceProxy(ready_server, Ready)
+
+        resp = ready_proxy(robot_num=self.my_num)
 
     '''
     Get my position from odom and save it
