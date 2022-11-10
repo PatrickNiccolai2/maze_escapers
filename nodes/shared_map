@@ -5,6 +5,7 @@
 import math # use of pi.
 import tf
 from collections import deque
+import scipy.optimize as scipy_opt
 
 # import of relevant libraries.
 import rospy # module for ROS APIs
@@ -37,7 +38,7 @@ class SharedMap():
     self.whole_graph_edges is a list of the edges between those vertices 
     '''
     def get_whole_graph(self):
-        filename = "/root/catkin_ws/src/maze_escapers/medmaze2.png"
+        filename = "/root/catkin_ws/src/maze_escapers/crossmaze.png"
         maze_reader = MazeReader(filename)
         self.whole_graph_vertices, self.whole_graph_edges = maze_reader.get_graph_representation()
         '''
@@ -103,24 +104,45 @@ class SharedMap():
                 #print(bid)
 
         print(bids_dict)
-        assigned_vertices = []
-        assignments_dict = {}
+        self.assign_bids(bids_dict)
+
+    '''
+    Assign bids using Hungarian algorithm
+    '''
+    def assign_bids(self, bids_dict):
+        # Create matrix 
+        matrix = []
+        robot_names_order = []
+        vertices_order = []
+        name_index = 0
         for robot_name in bids_dict:
-            min_bid = 10000000
-            min_vertex = None 
+            robot_names_order.append(robot_name)
+            row = []
+            vertex_index = 0
             for vertex in bids_dict[robot_name]:
-                bid_val = bids_dict[robot_name][vertex]
-                if(bid_val < min_bid and vertex not in assigned_vertices):
-                    min_bid = bid_val
-                    min_vertex = vertex
-            assignments_dict[robot_name] = min_vertex
-            assigned_vertices.append(min_vertex)
+                if(name_index == 0):
+                    vertices_order.append(vertex)
+                row.append(bids_dict[robot_name][vertex])
+                vertex_index += 1
+
+            matrix.append(row)
+            name_index += 1
+
+        print(matrix)
+        # Get row and col indices for optimal assignment
+        hungarian_row, hungarian_col = scipy_opt.linear_sum_assignment(matrix)
+
+        # We care about col
+        print(hungarian_col)
+
+        # Create assignments_dict with optimal assignment
+        assignments_dict = {}
+        for i in range(len(hungarian_col)):
+            assignments_dict[robot_names_order[i]] = vertices_order[hungarian_col[i]]
 
         print(assignments_dict)
 
         self.get_path(assignments_dict)
-
-        #self.send_assignments(assignments_dict)
 
     def get_path(self, assignments_dict):
         robot_paths_dict = {}
@@ -131,21 +153,31 @@ class SharedMap():
             robot_paths_dict[robot_name] = path 
 
         print(robot_paths_dict)
+        self.send_assignments(robot_paths_dict)
 
     '''
     After the auction, send all assignments
     '''
-    def send_assignments(self, assignments_dict):
+    def send_assignments(self, robot_paths_dict):
         for robot_name in self.robot_names:
+            # Get robot's service
             print("sending goal to " + robot_name)
             assignment_server = robot_name + "/assignment_service"
             rospy.wait_for_service(assignment_server)
             print("After wait for assignment service")
             assigment_proxy = rospy.ServiceProxy(assignment_server, Assignment)
 
-            assignment = assignments_dict[robot_name]
-            resp = assigment_proxy(x=assignment[0], y=assignment[1])
+            # Flatten path to 1d array
+            path_flat = []
+            path_coords = robot_paths_dict[robot_name]
+            for coord in path_coords:
+                path_flat.append(coord[0])
+                path_flat.append(coord[1])
 
+            # Send flattened path to service
+            resp = assigment_proxy(flat_path=path_flat)
+
+            # Robot is no longer ready
             self.ready_dict[robot_name] = 0
 
 
@@ -234,10 +266,8 @@ class SharedMap():
         while len(bfs_frontier) > 0:
             v = bfs_frontier.popleft()
             # Each adjacent vertex of start is searched
-            print("Searching " + str(v))
             if v != None:
                 for each in self.get_neighbors(list(v)):
-                    print("Neighbor: " + str(each))
                     each = tuple(each)
                     # Determines if a vertex has already been searched
                     if each in bfs_dic:

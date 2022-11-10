@@ -72,13 +72,13 @@ class Explorer():
     def handle_bid(self, req):
         print("In handle_bid, req = " + str(req))
         my_coord = [self.my_position.position.x, self.my_position.position.y]
-        print(my_coord)
         req_coord = [req.x, req.y]
 
         my_dist = self.manhattan_distance_coords(my_coord, req_coord)
         point_to_start_dist = self.manhattan_distance_coords(self.start_coord, req_coord)
 
         my_bid = my_dist + point_to_start_dist
+        print(my_bid)
         return ExplorerBidResponse(bid=my_bid)
 
     ############################## ASSIGNMENT SERVICE ##############################
@@ -92,7 +92,11 @@ class Explorer():
 
     def handle_assignment(self, req):
         print("in handle_assignment, req = " + str(req))
-        self.goal_coord = [req.x, req.y]
+        coords = []
+        for i in range(0, len(req.flat_path)-1, 2):
+            coords.append([req.flat_path[i], req.flat_path[i+1]])
+
+        print(coords)
         return AssignmentResponse(response=1)
 
 
