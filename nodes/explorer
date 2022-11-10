@@ -31,7 +31,7 @@ class Explorer():
     def __init__(self):
         self.my_name = rospy.get_namespace()
         self.my_num = int(self.my_name[7:-1])
-        self.goal_coord = None
+        self.goal_coords = None
         self.old_goal = None 
         print(self.my_num)
 
@@ -97,10 +97,18 @@ class Explorer():
             coords.append([req.flat_path[i], req.flat_path[i+1]])
 
         print(coords)
+        self.goal_coords = coords[:-1]
         return AssignmentResponse(response=1)
 
 
     ############################## MOVEMENT ##############################
+
+    def follow_path(self, goal_coords):
+        goal_coords.reverse()
+        for coord in goal_coords:
+            self.go_to_coord(coord)
+            
+        self.send_ready()
 
     '''
     Calculates rotation and distance needed to move robot to goal
@@ -206,10 +214,10 @@ class Explorer():
         self.my_position = msg.pose.pose
 
         # Check if got a new goal
-        if(self.goal_coord != None):
-            if(self.old_goal != self.goal_coord):
-                self.old_goal = self.goal_coord
-                self.go_to_coord(self.goal_coord)
+        if(self.goal_coords != None):
+            if(self.old_goal != self.goal_coords):
+                self.old_goal = self.goal_coords
+                self.follow_path(self.goal_coords)
 
     '''
     Calculates euclidian distance of two pairs of coords
