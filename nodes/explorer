@@ -5,7 +5,6 @@
 import math # use of pi.
 import tf
 from collections import deque
-from threading import Thread
 
 # import of relevant libraries.
 import rospy # module for ROS APIs

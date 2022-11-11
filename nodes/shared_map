@@ -6,7 +6,6 @@ import math # use of pi.
 import tf
 from collections import deque
 import scipy.optimize as scipy_opt
-from threading import Thread
 from multiprocessing import Process
 
 # import of relevant libraries.
@@ -23,9 +22,9 @@ from maze_escapers.maze_reader import MazeReader
 class SharedMap():
     def __init__(self):
         # Probably need to do something better for this
-        self.robot_names = ["/robot_0", "/robot_1"]
+        self.robot_names = ["/robot_0", "/robot_1", "/robot_2"]
         self.ready_dict = {}
-        self.robot_last_vertex_dict = {"/robot_0":[1,1], "/robot_1":[1,1]}
+        self.robot_last_vertex_dict = {"/robot_0":[1,1], "/robot_1":[1,1], "/robot_2":[1,1]}
 
         self.get_whole_graph()
         self.known_vertices = []
@@ -129,17 +128,23 @@ class SharedMap():
             matrix.append(row)
             name_index += 1
 
-        #print(matrix)
+        print(matrix)
         # Get row and col indices for optimal assignment
         hungarian_row, hungarian_col = scipy_opt.linear_sum_assignment(matrix)
 
         # We care about col
-        #print(hungarian_col)
+        print(hungarian_row)
+        print(hungarian_col)
+
+        print(robot_names_order)
+        print(vertices_order)
 
         # Create assignments_dict with optimal assignment
         assignments_dict = {}
-        for i in range(len(hungarian_col)):
-            assignments_dict[robot_names_order[i]] = vertices_order[hungarian_col[i]]
+        for i in range(len(hungarian_row)):
+            assigned_name = robot_names_order[hungarian_row[i]]
+            assigned_vertex = vertices_order[hungarian_col[i]]
+            assignments_dict[assigned_name] = assigned_vertex
 
         print("assignments:")
         print(assignments_dict)
@@ -166,11 +171,11 @@ class SharedMap():
     '''
     def send_assignments(self, robot_paths_dict):
         threads = []
-        for robot_name in self.robot_names:
+        for robot_name in robot_paths_dict:
             # Robot is no longer ready
             self.ready_dict[robot_name] = 0
 
-        for robot_name in self.robot_names:
+        for robot_name in robot_paths_dict:
             print("Making thread for " + robot_name)
             t = Process(target=self.send_assignment, args=[robot_name, robot_paths_dict])
             threads.append(t)
