@@ -298,6 +298,7 @@ class SharedMap():
                 if self.ready_dict[name] == 1:
                     num_ready += 1
             if num_ready >= len(self.robot_names) // 3:
+                rospy.sleep(1)
                 self.start_zack_auction()
 
             return ReadyResponse(response=1)
