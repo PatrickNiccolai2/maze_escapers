@@ -89,10 +89,6 @@ include_directories(
 # See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
 
 catkin_install_python(PROGRAMS 
-  nodes/leader
-  nodes/follower
-  nodes/tf_broadcaster
-  nodes/rand_waypoints
   nodes/shared_map
   nodes/explorer
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
