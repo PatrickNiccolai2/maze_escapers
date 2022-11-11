@@ -20,11 +20,12 @@ from maze_escapers.maze_reader import MazeReader
 
 
 class SharedMap():
-    def __init__(self):
+    def __init__(self, auction_type="patrick"):
         # Probably need to do something better for this
         self.robot_names = ["/robot_0", "/robot_1", "/robot_2"]
         self.ready_dict = {}
         self.robot_last_vertex_dict = {"/robot_0":[1,1], "/robot_1":[1,1], "/robot_2":[1,1]}
+        self.auction_type = auction_type
 
         self.get_whole_graph()
         self.known_vertices = []
@@ -91,6 +92,26 @@ class SharedMap():
         print("frontier = " + str(self.frontier))
         bids_dict = {}
         for robot_name in self.robot_names:
+            bids_dict[robot_name] = {}
+            # For each robot, reate proxy for that robots service
+            bid_server = robot_name + "/bid_service"
+            rospy.wait_for_service(bid_server)
+            bid_proxy = rospy.ServiceProxy(bid_server, ExplorerBid)
+            for frontier_node in self.frontier:
+                resp = bid_proxy(x=frontier_node[0], y=frontier_node[1])
+                bid = resp.bid 
+                bids_dict[robot_name][tuple(frontier_node)] = bid
+                #print(bid)
+
+        print("Bids:")
+        print(bids_dict)
+        self.assign_bids(bids_dict)
+
+    def start_zack_auction(self):
+        print("In auction")
+        print("frontier = " + str(self.frontier))
+        bids_dict = {}
+        for robot_name in self.ready_dict.keys():
             bids_dict[robot_name] = {}
             # For each robot, reate proxy for that robots service
             bid_server = robot_name + "/bid_service"
@@ -264,15 +285,26 @@ class SharedMap():
         self.ready_dict[robot_name] = 1
         print(self.ready_dict)
         
-        # Check if all robots are ready, if they are we can start a new auction
-        all_ready = True
-        for name in self.robot_names:
-            if(self.ready_dict[name] == 0):
-                all_ready = False
-        if(all_ready):
-            self.start_patrick_auction()
+        if self.auction_type == "zack_auction":
+            num_ready = 0
+            for name in self.robot_names:
+                if self.ready_dict[name] == 1:
+                    num_ready += 1
+            if num_ready >= len(self.robot_names) // 3:
+                self.start_zack_auction()
 
-        return ReadyResponse(response=1)
+            return ReadyResponse(response=1)
+        
+        elif self.auction_type == "patrick_auction":
+            # Check if all robots are ready, if they are we can start a new auction
+            all_ready = True
+            for name in self.robot_names:
+                if(self.ready_dict[name] == 0):
+                    all_ready = False
+            if(all_ready):
+                self.start_patrick_auction()
+
+            return ReadyResponse(response=1)
 
     ############################## BFS ##############################
 
