@@ -154,6 +154,10 @@ class SharedMap():
             path = self.bfs(tuple(start), tuple(goal))
             robot_paths_dict[robot_name] = path 
 
+            # Update for next time
+            self.robot_last_vertex_dict[robot_name] = goal
+
+        print("paths")
         print(robot_paths_dict)
         self.send_assignments(robot_paths_dict)
 
@@ -163,11 +167,14 @@ class SharedMap():
     def send_assignments(self, robot_paths_dict):
         threads = []
         for robot_name in self.robot_names:
+            # Robot is no longer ready
+            self.ready_dict[robot_name] = 0
+
+        for robot_name in self.robot_names:
             print("Making thread for " + robot_name)
             t = Process(target=self.send_assignment, args=[robot_name, robot_paths_dict])
             threads.append(t)
             t.start()
-            #t.run()
 
         for thread in threads:
             thread.join()
@@ -179,7 +186,6 @@ class SharedMap():
         print("sending goal to " + robot_name)
         assignment_server = robot_name + "/assignment_service"
         rospy.wait_for_service(assignment_server)
-        print("After wait for assignment service")
         assigment_proxy = rospy.ServiceProxy(assignment_server, Assignment)
 
         # Flatten path to 1d array
