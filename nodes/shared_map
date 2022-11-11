@@ -33,6 +33,9 @@ class SharedMap():
         self.init_add_to_map_service()
         self.init_ready_service()
 
+        rospy.sleep(5)
+        rospy.Timer(rospy.Duration(2), self.timer_callback)
+
     '''
     Use maze_reader.py to generate a graph of a given maze image, specified
     in filename
@@ -131,7 +134,8 @@ class SharedMap():
 
         print("Bids:")
         print(bids_dict)
-        self.assign_bids(bids_dict)
+        if(len(bids_dict) > 0):
+            self.assign_bids(bids_dict)
 
     '''
     Assign bids using Hungarian algorithm
@@ -174,7 +178,7 @@ class SharedMap():
             assignments_dict[assigned_name] = assigned_vertex
 
             try:
-                self.frontier.remove(assigned_vertex)
+                self.frontier.remove(list(assigned_vertex))
             except:
                 pass
 
@@ -213,8 +217,8 @@ class SharedMap():
             threads.append(t)
             t.start()
 
-        for thread in threads:
-            thread.join()
+        #for thread in threads:
+        #    thread.join()
 
         print("All processes joined")
             
@@ -299,7 +303,7 @@ class SharedMap():
                     num_ready += 1
             if num_ready >= len(self.robot_names) // 3:
                 rospy.sleep(1)
-                self.start_zack_auction()
+                #self.start_zack_auction()
 
             return ReadyResponse(response=1)
         
@@ -365,8 +369,6 @@ def main():
     rospy.sleep(2)
 
     sharedmap = SharedMap()
-
-    rospy.Timer(rospy.Duration(2), sharedmap.timer_callback)
 
     # Robot moves 1 m forward, rotate of 180 degrees, and moves 1 m forward.
     try:
