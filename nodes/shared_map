@@ -351,6 +351,10 @@ class SharedMap():
 
         return path
 
+    def timer_callback(self, event):
+        print("Timer callback")
+        self.start_zack_auction()
+
 def main():
     """Main function."""
 
@@ -361,6 +365,8 @@ def main():
     rospy.sleep(2)
 
     sharedmap = SharedMap()
+
+    rospy.Timer(rospy.Duration(2), sharedmap.timer_callback)
 
     # Robot moves 1 m forward, rotate of 180 degrees, and moves 1 m forward.
     try:
