@@ -5,6 +5,7 @@
 import math # use of pi.
 import tf
 from collections import deque
+from threading import Thread
 
 # import of relevant libraries.
 import rospy # module for ROS APIs
@@ -12,6 +13,8 @@ from geometry_msgs.msg import Twist # message type for cmd_vel
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from sensor_msgs.msg import LaserScan # message type for scan
 from nav_msgs.msg import Odometry
+from rosgraph_msgs.msg import Clock
+
 from maze_escapers.srv import Neighbors, NeighborsResponse
 from maze_escapers.srv import AddToMap, AddToMapResponse
 from maze_escapers.srv import ExplorerBid, ExplorerBidResponse
@@ -43,9 +46,7 @@ class Explorer():
         rospy.Subscriber(self.my_name + "odom", Odometry, self.my_odom_callback)
         rospy.sleep(2)
 
-        print("before wait")
         rospy.wait_for_service("/add_to_map_service")
-        print("after wait")
 
         self.init_auction_service()
         self.init_assignment_service()
@@ -70,7 +71,6 @@ class Explorer():
         print("bid_service server ready")
 
     def handle_bid(self, req):
-        print("In handle_bid, req = " + str(req))
         my_coord = [self.my_position.position.x, self.my_position.position.y]
         req_coord = [req.x, req.y]
 
@@ -88,7 +88,6 @@ class Explorer():
     '''
     def init_assignment_service(self):
         s = rospy.Service(self.my_name + "assignment_service", Assignment, self.handle_assignment)
-        print("assignment_service server ready")
 
     def handle_assignment(self, req):
         print("in handle_assignment, req = " + str(req))
@@ -98,6 +97,7 @@ class Explorer():
 
         print(coords)
         self.goal_coords = coords[:-1]
+        self.follow_path(self.goal_coords)
         return AssignmentResponse(response=1)
 
 
@@ -106,8 +106,11 @@ class Explorer():
     def follow_path(self, goal_coords):
         goal_coords.reverse()
         for coord in goal_coords:
-            self.go_to_coord(coord)
+            middle_coord = [coord[0] + 0.5, coord[1] + 0.5]
+            self.go_to_coord(middle_coord)
             
+        last_coord = goal_coords[-1]
+        self.add_to_map(last_coord)
         self.send_ready()
 
     '''
@@ -195,7 +198,14 @@ class Explorer():
         
 
     ############################## UTILITY FUNCTIONS ##############################
-
+    
+    '''
+    Add newly discovered coord to shared map
+    '''
+    def add_to_map(self, coord):
+        rospy.wait_for_service("/add_to_map_service")
+        add_proxy = rospy.ServiceProxy("/add_to_map_service", AddToMap)
+        resp = add_proxy(coord[0],coord[1])
     '''
     Tell shared_map that I am ready to be assigned a new vertex
     '''
@@ -210,14 +220,18 @@ class Explorer():
     Get my position from odom and save it
     '''
     def my_odom_callback(self, msg):
-        #print("in my_pose_callback")
         self.my_position = msg.pose.pose
-
+        '''
         # Check if got a new goal
         if(self.goal_coords != None):
             if(self.old_goal != self.goal_coords):
                 self.old_goal = self.goal_coords
-                self.follow_path(self.goal_coords)
+                print("About to follow path")
+                print(self.my_position)
+                #self.follow_path(self.goal_coords)
+                t = Thread(target=self.follow_path, args=[self.goal_coords])
+                t.run()
+        '''
 
     '''
     Calculates euclidian distance of two pairs of coords
