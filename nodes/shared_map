@@ -6,6 +6,7 @@ import math # use of pi.
 import tf
 from collections import deque
 import scipy.optimize as scipy_opt
+from multiprocessing import Process
 
 # import of relevant libraries.
 import rospy # module for ROS APIs
@@ -21,9 +22,9 @@ from maze_escapers.maze_reader import MazeReader
 class SharedMap():
     def __init__(self):
         # Probably need to do something better for this
-        self.robot_names = ["/robot_0", "/robot_1"]
+        self.robot_names = ["/robot_0", "/robot_1", "/robot_2"]
         self.ready_dict = {}
-        self.robot_last_vertex_dict = {"/robot_0":[1,1], "/robot_1":[1,1]}
+        self.robot_last_vertex_dict = {"/robot_0":[1,1], "/robot_1":[1,1], "/robot_2":[1,1]}
 
         self.get_whole_graph()
         self.known_vertices = []
@@ -90,12 +91,10 @@ class SharedMap():
         print("frontier = " + str(self.frontier))
         bids_dict = {}
         for robot_name in self.robot_names:
-            print("Getting bids for " + robot_name)
             bids_dict[robot_name] = {}
             # For each robot, reate proxy for that robots service
             bid_server = robot_name + "/bid_service"
             rospy.wait_for_service(bid_server)
-            print("After wait for bid service")
             bid_proxy = rospy.ServiceProxy(bid_server, ExplorerBid)
             for frontier_node in self.frontier:
                 resp = bid_proxy(x=frontier_node[0], y=frontier_node[1])
@@ -103,6 +102,7 @@ class SharedMap():
                 bids_dict[robot_name][tuple(frontier_node)] = bid
                 #print(bid)
 
+        print("Bids:")
         print(bids_dict)
         self.assign_bids(bids_dict)
 
@@ -133,13 +133,20 @@ class SharedMap():
         hungarian_row, hungarian_col = scipy_opt.linear_sum_assignment(matrix)
 
         # We care about col
+        print(hungarian_row)
         print(hungarian_col)
+
+        print(robot_names_order)
+        print(vertices_order)
 
         # Create assignments_dict with optimal assignment
         assignments_dict = {}
-        for i in range(len(hungarian_col)):
-            assignments_dict[robot_names_order[i]] = vertices_order[hungarian_col[i]]
+        for i in range(len(hungarian_row)):
+            assigned_name = robot_names_order[hungarian_row[i]]
+            assigned_vertex = vertices_order[hungarian_col[i]]
+            assignments_dict[assigned_name] = assigned_vertex
 
+        print("assignments:")
         print(assignments_dict)
 
         self.get_path(assignments_dict)
@@ -152,6 +159,10 @@ class SharedMap():
             path = self.bfs(tuple(start), tuple(goal))
             robot_paths_dict[robot_name] = path 
 
+            # Update for next time
+            self.robot_last_vertex_dict[robot_name] = goal
+
+        print("paths")
         print(robot_paths_dict)
         self.send_assignments(robot_paths_dict)
 
@@ -159,27 +170,41 @@ class SharedMap():
     After the auction, send all assignments
     '''
     def send_assignments(self, robot_paths_dict):
-        for robot_name in self.robot_names:
-            # Get robot's service
-            print("sending goal to " + robot_name)
-            assignment_server = robot_name + "/assignment_service"
-            rospy.wait_for_service(assignment_server)
-            print("After wait for assignment service")
-            assigment_proxy = rospy.ServiceProxy(assignment_server, Assignment)
-
-            # Flatten path to 1d array
-            path_flat = []
-            path_coords = robot_paths_dict[robot_name]
-            for coord in path_coords:
-                path_flat.append(coord[0])
-                path_flat.append(coord[1])
-
-            # Send flattened path to service
-            resp = assigment_proxy(flat_path=path_flat)
-
+        threads = []
+        for robot_name in robot_paths_dict:
             # Robot is no longer ready
             self.ready_dict[robot_name] = 0
 
+        for robot_name in robot_paths_dict:
+            print("Making thread for " + robot_name)
+            t = Process(target=self.send_assignment, args=[robot_name, robot_paths_dict])
+            threads.append(t)
+            t.start()
+
+        for thread in threads:
+            thread.join()
+
+        print("All processes joined")
+            
+    def send_assignment(self, robot_name, robot_paths_dict):
+        # Get robot's service
+        print("sending goal to " + robot_name)
+        assignment_server = robot_name + "/assignment_service"
+        rospy.wait_for_service(assignment_server)
+        assigment_proxy = rospy.ServiceProxy(assignment_server, Assignment)
+
+        # Flatten path to 1d array
+        path_flat = []
+        path_coords = robot_paths_dict[robot_name]
+        for coord in path_coords:
+            path_flat.append(coord[0])
+            path_flat.append(coord[1])
+
+        # Robot is no longer ready
+        self.ready_dict[robot_name] = 0
+
+        # Send flattened path to service
+        resp = assigment_proxy(flat_path=path_flat)
 
     ############################## SERVICES ##############################
 
@@ -188,7 +213,6 @@ class SharedMap():
     '''
     def init_add_to_map_service(self):
         s = rospy.Service('/add_to_map_service', AddToMap, self.handle_add_to_map_service_request)
-        print("add_to_map_service server ready")
 
     '''
     Add vertex and its edges to the shared map.
@@ -229,7 +253,6 @@ class SharedMap():
         for robot_name in self.robot_names:
             self.ready_dict[robot_name] = 0
         s = rospy.Service('/ready_service', Ready, self.handle_ready)
-        print("ready_service server ready")
 
     '''
     req has the number of the robot that sent that it is ready
