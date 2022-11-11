@@ -32,7 +32,7 @@ class MazeReader:
 		print("Old vertices")
 		print(vertices)
 		'''
-		edges = self.get_edges(vertices)
+		edges = self.get_edges(vertices, white_coords)
 
 		#self.output_vertices(self.maze, vertices)
 
@@ -74,7 +74,7 @@ class MazeReader:
 	'''
 	Once we have vertices, get edges between them 
 	'''
-	def get_edges(self, vertices):
+	def get_edges(self, vertices, white_coords):
 		edges = []
 		# Get horizontal edges
 		for vertex in vertices:
@@ -82,6 +82,10 @@ class MazeReader:
 			while(y_pos < self.width):
 				y_pos += 1
 				new_vertex = [vertex[0], y_pos]
+
+				if(new_vertex not in white_coords):
+					break
+
 				if(new_vertex in vertices):
 					# We found next vertex
 					edges.append([vertex, new_vertex])
@@ -93,6 +97,10 @@ class MazeReader:
 			while(x_pos < self.height):
 				x_pos += 1
 				new_vertex = [x_pos, vertex[1]]
+
+				if(new_vertex not in white_coords):
+					break
+
 				if(new_vertex in vertices):
 					# We found next vertex
 					edges.append([vertex, new_vertex])
