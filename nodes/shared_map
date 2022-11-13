@@ -20,7 +20,7 @@ from maze_escapers.maze_reader import MazeReader
 
 
 class SharedMap():
-    def __init__(self, auction_type="zack_auction"):
+    def __init__(self, auction_type="patrick_auction"):
         # Probably need to do something better for this
         self.robot_names = ["/robot_0", "/robot_1", "/robot_2"]
         self.ready_dict = {}
@@ -33,8 +33,9 @@ class SharedMap():
         self.init_add_to_map_service()
         self.init_ready_service()
 
-        rospy.sleep(5)
-        rospy.Timer(rospy.Duration(2), self.timer_callback)
+        if(auction_type == "zack_auction"):
+            rospy.sleep(5)
+            rospy.Timer(rospy.Duration(2), self.timer_callback)
 
     '''
     Use maze_reader.py to generate a graph of a given maze image, specified

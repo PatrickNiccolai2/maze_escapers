@@ -23,9 +23,9 @@ from maze_escapers.srv import Ready, ReadyResponse
 # Constants.
 FREQUENCY = 10 #Hz.
 LINEAR_VELOCITY = 0.2 # m/s
-ANGULAR_VELOCITY = math.pi/4 # rad/s
+ANGULAR_VELOCITY = math.pi/2 # rad/s
 LASER_ANGLE_FRONT = 0 # radians
-MIN_THRESHOLD_DISTANCE = 0.5 # m, threshold distance.
+MIN_THRESHOLD_DISTANCE = 0.8 # m, threshold distance.
 DEFAULT_CMD_VEL_TOPIC = 'cmd_vel'
 DEFAULT_SCAN_TOPIC = 'scan'
 
@@ -38,6 +38,7 @@ class Explorer():
         print(self.my_num)
 
         self._cmd_pub = rospy.Publisher(self.my_name + "cmd_vel", Twist, queue_size=1)
+        self._laser_sub = rospy.Subscriber(self.my_name + "/base_scan", LaserScan, self.my_laser_callback, queue_size=1)
 
         self.start_coord = [1,1]
 
@@ -231,6 +232,36 @@ class Explorer():
                 t = Thread(target=self.follow_path, args=[self.goal_coords])
                 t.run()
         '''
+
+    def my_laser_callback(self, msg):
+        close_to_wall = False
+        close_direction = -1
+        for i in range(210, 510):
+            if(msg.ranges[i] < MIN_THRESHOLD_DISTANCE):
+                close_to_wall = True
+                close_direction = i 
+                break
+
+        if(close_to_wall):
+            twist_msg = Twist()
+            if(close_direction < 360):
+                twist_msg.angular.z = ANGULAR_VELOCITY
+            else:
+                twist_msg.angular.z = -ANGULAR_VELOCITY
+
+            duration = abs(math.pi / 90 / twist_msg.angular.z)
+            start_time = rospy.get_rostime()
+            rate = rospy.Rate(FREQUENCY)
+            while not rospy.is_shutdown():
+                # Check if done
+                if rospy.get_rostime() - start_time >= rospy.Duration(duration):
+                    break
+                    
+                # Publish message.
+                self._cmd_pub.publish(twist_msg)
+                
+                # Sleep to keep the set frequency.
+                rate.sleep()
 
     '''
     Calculates euclidian distance of two pairs of coords
