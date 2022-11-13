@@ -19,6 +19,8 @@ from maze_escapers.srv import AddToMap, AddToMapResponse
 from maze_escapers.srv import ExplorerBid, ExplorerBidResponse
 from maze_escapers.srv import Assignment, AssignmentResponse
 from maze_escapers.srv import Ready, ReadyResponse
+from maze_escapers.srv import PathToGoal, PathToGoalResponse
+from maze_escapers.msg import GoalMsg
 
 # Constants.
 FREQUENCY = 10 #Hz.
@@ -35,11 +37,17 @@ class Explorer():
         self.my_num = int(self.my_name[7:-1])
         self.goal_coords = None
         self.old_goal = None 
+        self.goal_found = False
+        self.on_path = False
         print(self.my_num)
+
+        # The starting coord for all robots
+        self.last_coord = [1,1]
 
         self._cmd_pub = rospy.Publisher(self.my_name + "cmd_vel", Twist, queue_size=1)
         self._laser_sub = rospy.Subscriber(self.my_name + "/base_scan", LaserScan, self.my_laser_callback, queue_size=1)
-
+        self._goal_sub = rospy.Subscriber("/goal_topic", GoalMsg, self.my_goal_callback, queue_size=1)
+        
         self.start_coord = [1,1]
 
         # Subscribe to my odom
@@ -97,20 +105,24 @@ class Explorer():
 
         print(coords)
         self.goal_coords = coords[:-1]
-        self.follow_path(self.goal_coords)
+        if(not self.goal_found):
+            self.follow_path(self.goal_coords)
         return AssignmentResponse(response=1)
 
 
     ############################## MOVEMENT ##############################
 
     def follow_path(self, goal_coords):
+        self.on_path = True
         goal_coords.reverse()
         for coord in goal_coords:
             middle_coord = [coord[0] + 0.5, coord[1] + 0.5]
+            self.last_coord = coord
             self.go_to_coord(middle_coord)
-            
-        last_coord = goal_coords[-1]
-        self.add_to_map(last_coord)
+
+        self.on_path = False
+
+        self.add_to_map(self.last_coord)
         self.send_ready()
 
     '''
@@ -206,6 +218,48 @@ class Explorer():
         rospy.wait_for_service("/add_to_map_service")
         add_proxy = rospy.ServiceProxy("/add_to_map_service", AddToMap)
         resp = add_proxy(coord[0],coord[1])
+
+        self.goal_test(coord)
+
+    '''
+    Check if the vertex we just discovered is the goal. If so, broadcasts 
+    coords to /goal_topic topic
+    '''
+    def goal_test(self, coord):
+        if(coord == [5,6]):
+            print("Found goal")
+            self.goal_found = True
+            goal_pub = rospy.Publisher("/goal_topic", GoalMsg, queue_size=1)
+            goal_msg = GoalMsg(x=coord[0], y=coord[1])
+            while(True):
+                goal_pub.publish(goal_msg)
+
+    '''
+    Called when we receive the coords of the goal
+    '''
+    def my_goal_callback(self, msg):
+        if(self.goal_found == False):
+            self.goal_found = True
+            print("Before path wait")
+            while(self.on_path):
+                pass
+            print("After path wait")
+
+            path_to_goal_server = "/path_to_goal_service"
+            rospy.wait_for_service(path_to_goal_server)
+            path_to_goal_proxy = rospy.ServiceProxy(path_to_goal_server, PathToGoal)
+
+            resp = path_to_goal_proxy(my_x=self.last_coord[0], my_y=self.last_coord[1], goal_x=msg.x, goal_y= msg.y)
+
+            print("Got response")
+            coords = []
+            for i in range(0, len(resp.flat_path)-1, 2):
+                coords.append([resp.flat_path[i], resp.flat_path[i+1]])
+
+            goal_coords = coords[:-1]
+            print("path to goal = " + str(goal_coords))
+            self.follow_path(goal_coords)
+
     '''
     Tell shared_map that I am ready to be assigned a new vertex
     '''

@@ -1,0 +1,6 @@
+float32 my_x
+float32 my_y
+float32 goal_x
+float32 goal_y
+---
+float32[] flat_path

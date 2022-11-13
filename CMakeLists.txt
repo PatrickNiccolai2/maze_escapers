@@ -32,6 +32,7 @@ catkin_python_setup()
 add_message_files(
    FILES
    RobotVertex.msg
+   GoalMsg.msg
  )
 
  add_service_files(
@@ -42,6 +43,7 @@ add_message_files(
    AddToMap.srv
    ExplorerBid.srv
    Ready.srv
+   PathToGoal.srv
 )
 
 add_action_files(

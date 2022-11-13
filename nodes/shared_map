@@ -15,6 +15,7 @@ from maze_escapers.srv import AddToMap, AddToMapResponse
 from maze_escapers.srv import ExplorerBid, ExplorerBidResponse
 from maze_escapers.srv import Assignment, AssignmentResponse
 from maze_escapers.srv import Ready, ReadyResponse
+from maze_escapers.srv import PathToGoal, PathToGoalResponse
 
 from maze_escapers.maze_reader import MazeReader
 
@@ -32,6 +33,7 @@ class SharedMap():
         self.known_edges = []
         self.init_add_to_map_service()
         self.init_ready_service()
+        self.init_path_to_goal_service()
 
         if(auction_type == "zack_auction"):
             rospy.sleep(5)
@@ -78,6 +80,20 @@ class SharedMap():
         neighbors = []
 
         for edge in self.whole_graph_edges:
+            if(edge[0] == vertex):
+                neighbors.append(edge[1])
+            elif(edge[1] == vertex):
+                neighbors.append(edge[0])
+
+        return neighbors
+
+    '''
+    Get the neighbors of a given vertex, looking at the known part maze
+    '''
+    def get_known_neighbors(self, vertex):
+        neighbors = []
+
+        for edge in self.known_edges:
             if(edge[0] == vertex):
                 neighbors.append(edge[1])
             elif(edge[1] == vertex):
@@ -271,7 +287,7 @@ class SharedMap():
 
             # Add the vertex's edges to known_edges
             for edge in self.whole_graph_edges:
-                if(edge[0] == vertex or edge[1] == 1):
+                if(edge[0] == vertex or edge[1] == vertex):
                     if(edge not in self.known_edges):
                         self.known_edges.append(edge)
 
@@ -319,6 +335,31 @@ class SharedMap():
 
             return ReadyResponse(response=1)
 
+    '''
+    Service which robots use to get their path to the goal, once its found
+    '''
+    def init_path_to_goal_service(self):
+        s = rospy.Service('/path_to_goal_service', PathToGoal, self.handle_path_to_goal)
+
+    '''
+    Use bfs to get a robot's path to the goal
+    '''
+    def handle_path_to_goal(self, req):
+        print("In handle_path_to_goal")
+        print(req)
+        start_coord = [req.my_x, req.my_y]
+        goal_coord = [req.goal_x, req.goal_y]
+
+        path_coords = self.bfs(tuple(start_coord), tuple(goal_coord))
+
+        # Flatten path to 1d array
+        path_flat = []
+        for coord in path_coords:
+            path_flat.append(coord[0])
+            path_flat.append(coord[1])
+
+        return PathToGoalResponse(flat_path = path_flat)
+
     ############################## BFS ##############################
 
     def bfs(self, start, goal):
@@ -335,7 +376,7 @@ class SharedMap():
             v = bfs_frontier.popleft()
             # Each adjacent vertex of start is searched
             if v != None:
-                for each in self.get_neighbors(list(v)):
+                for each in self.get_known_neighbors(list(v)):
                     each = tuple(each)
                     # Determines if a vertex has already been searched
                     if each in bfs_dic:
