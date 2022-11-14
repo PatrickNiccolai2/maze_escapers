@@ -80,15 +80,39 @@ class Explorer():
         print("bid_service server ready")
 
     def handle_bid(self, req):
-        my_coord = [self.my_position.position.x, self.my_position.position.y]
-        req_coord = [req.x, req.y]
+        if(False):
+            my_coord = [self.my_position.position.x, self.my_position.position.y]
+            req_coord = [req.x, req.y]
 
-        my_dist = self.manhattan_distance_coords(my_coord, req_coord)
-        point_to_start_dist = self.manhattan_distance_coords(self.start_coord, req_coord)
+            my_dist = self.manhattan_distance_coords(my_coord, req_coord)
+            point_to_start_dist = self.manhattan_distance_coords(self.start_coord, req_coord)
 
-        my_bid = my_dist + point_to_start_dist
-        print(my_bid)
-        return ExplorerBidResponse(bid=my_bid)
+            my_bid = my_dist + point_to_start_dist
+            print(my_bid)
+            return ExplorerBidResponse(bid=my_bid)
+        else:
+            path_to_goal_server = "/path_to_goal_service"
+            rospy.wait_for_service(path_to_goal_server)
+            path_to_goal_proxy = rospy.ServiceProxy(path_to_goal_server, PathToGoal)
+
+            my_path = path_to_goal_proxy(my_x=self.last_coord[0], my_y=self.last_coord[1], goal_x=req.x, goal_y= req.y)
+
+            start_path = path_to_goal_proxy(my_x=self.start_coord[0], my_y=self.start_coord[1], goal_x=req.x, goal_y= req.y)
+
+            my_path_len = len(my_path.flat_path) / 2
+            start_path_len = len(start_path.flat_path) / 2
+            my_bid = my_path_len + start_path_len
+
+            # Add tie breaker
+            my_coord = [self.my_position.position.x, self.my_position.position.y]
+            req_coord = [req.x, req.y]
+
+            my_dist = self.manhattan_distance_coords(my_coord, req_coord)
+
+            my_bid += 0.05 * my_dist
+
+            return ExplorerBidResponse(bid=my_bid)
+
 
     ############################## ASSIGNMENT SERVICE ##############################
 
