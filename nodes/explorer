@@ -171,8 +171,12 @@ class Explorer():
         rotate_angle = direction_to_goal - my_direction
 
         distance = self.euclidian_distance_coords(goal_coord, my_coord)
-        if(self.goal_found and goal_coord == self.final_goal_coord):
-            distance -= 1
+
+        fixed_goal_coord = [goal_coord[0] - 0.5, goal_coord[1] - 0.5]
+
+        if(self.goal_found and fixed_goal_coord == self.final_goal_coord):
+            print("Reducing distance")
+            distance -= 0.5
 
         print("rotate_angle = " + str(rotate_angle))
         self.rotate_in_place(rotate_angle)
