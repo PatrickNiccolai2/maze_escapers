@@ -278,6 +278,10 @@ class SharedMap():
 
         if(vertex not in self.known_vertices):
             # Remove vertex from frontier
+            try:
+                self.frontier.remove(vertex)
+            except:
+                pass
 
             # Update the frontier 
             self.update_frontier(vertex)
@@ -345,8 +349,6 @@ class SharedMap():
     Use bfs to get a robot's path to the goal
     '''
     def handle_path_to_goal(self, req):
-        print("In handle_path_to_goal")
-        print(req)
         start_coord = [req.my_x, req.my_y]
         goal_coord = [req.goal_x, req.goal_y]
 

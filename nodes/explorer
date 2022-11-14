@@ -80,6 +80,7 @@ class Explorer():
         print("bid_service server ready")
 
     def handle_bid(self, req):
+        print("Bidding on " + str(req))
         if(False):
             my_coord = [self.my_position.position.x, self.my_position.position.y]
             req_coord = [req.x, req.y]
