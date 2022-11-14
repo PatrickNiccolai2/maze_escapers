@@ -50,6 +50,7 @@ class Explorer():
         self._goal_sub = rospy.Subscriber("/goal_topic", GoalMsg, self.my_goal_callback, queue_size=1)
         
         self.start_coord = [1,1]
+        self.final_goal_coord = None
 
         # Subscribe to my odom
         rospy.Subscriber(self.my_name + "odom", Odometry, self.my_odom_callback)
@@ -170,6 +171,8 @@ class Explorer():
         rotate_angle = direction_to_goal - my_direction
 
         distance = self.euclidian_distance_coords(goal_coord, my_coord)
+        if(self.goal_found and goal_coord == self.final_goal_coord):
+            distance -= 1
 
         print("rotate_angle = " + str(rotate_angle))
         self.rotate_in_place(rotate_angle)
@@ -254,9 +257,10 @@ class Explorer():
     coords to /goal_topic topic
     '''
     def goal_test(self, coord):
-        if(coord == [0,0]):
+        if(coord == [5,6]):
             print("Found goal")
             self.goal_found = True
+            self.final_goal_coord = coord
             goal_pub = rospy.Publisher("/goal_topic", GoalMsg, queue_size=1)
             goal_msg = GoalMsg(x=coord[0], y=coord[1])
             while(True):
@@ -268,6 +272,7 @@ class Explorer():
     def my_goal_callback(self, msg):
         if(self.goal_found == False):
             self.goal_found = True
+            self.final_goal_coord = [msg.x, msg.y]
             print("Before path wait")
             while(self.on_path):
                 pass
