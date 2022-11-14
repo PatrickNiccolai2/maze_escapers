@@ -39,6 +39,7 @@ class Explorer():
         self.old_goal = None 
         self.goal_found = False
         self.on_path = False
+        self.currently_rotating = False
         print(self.my_num)
 
         # The starting coord for all robots
@@ -153,6 +154,7 @@ class Explorer():
     Rotate in place given angle
     '''
     def rotate_in_place(self, rotation_angle):
+        self.currently_rotating = True
         twist_msg = Twist()
         if(rotation_angle > 0):
             twist_msg.angular.z = ANGULAR_VELOCITY
@@ -175,6 +177,7 @@ class Explorer():
 
         # Rotated the required angle, stop.
         self.stop()
+        self.currently_rotating = False
 
     '''
     Move forward given distance
@@ -226,7 +229,7 @@ class Explorer():
     coords to /goal_topic topic
     '''
     def goal_test(self, coord):
-        if(coord == [5,6]):
+        if(coord == [0,0]):
             print("Found goal")
             self.goal_found = True
             goal_pub = rospy.Publisher("/goal_topic", GoalMsg, queue_size=1)
@@ -288,34 +291,35 @@ class Explorer():
         '''
 
     def my_laser_callback(self, msg):
-        close_to_wall = False
-        close_direction = -1
-        for i in range(210, 510):
-            if(msg.ranges[i] < MIN_THRESHOLD_DISTANCE):
-                close_to_wall = True
-                close_direction = i 
-                break
-
-        if(close_to_wall):
-            twist_msg = Twist()
-            if(close_direction < 360):
-                twist_msg.angular.z = ANGULAR_VELOCITY
-            else:
-                twist_msg.angular.z = -ANGULAR_VELOCITY
-
-            duration = abs(math.pi / 90 / twist_msg.angular.z)
-            start_time = rospy.get_rostime()
-            rate = rospy.Rate(FREQUENCY)
-            while not rospy.is_shutdown():
-                # Check if done
-                if rospy.get_rostime() - start_time >= rospy.Duration(duration):
+        if(self.on_path and not self.currently_rotating):
+            close_to_wall = False
+            close_direction = -1
+            for i in range(210, 510):
+                if(msg.ranges[i] < MIN_THRESHOLD_DISTANCE):
+                    close_to_wall = True
+                    close_direction = i 
                     break
+
+            if(close_to_wall):
+                twist_msg = Twist()
+                if(close_direction < 360):
+                    twist_msg.angular.z = ANGULAR_VELOCITY
+                else:
+                    twist_msg.angular.z = -ANGULAR_VELOCITY
+
+                duration = abs(math.pi / 90 / twist_msg.angular.z)
+                start_time = rospy.get_rostime()
+                rate = rospy.Rate(FREQUENCY)
+                while not rospy.is_shutdown():
+                    # Check if done
+                    if rospy.get_rostime() - start_time >= rospy.Duration(duration):
+                        break
+                        
+                    # Publish message.
+                    self._cmd_pub.publish(twist_msg)
                     
-                # Publish message.
-                self._cmd_pub.publish(twist_msg)
-                
-                # Sleep to keep the set frequency.
-                rate.sleep()
+                    # Sleep to keep the set frequency.
+                    rate.sleep()
 
     '''
     Calculates euclidian distance of two pairs of coords
