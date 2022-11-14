@@ -21,7 +21,7 @@ from maze_escapers.maze_reader import MazeReader
 
 
 class SharedMap():
-    def __init__(self, auction_type="patrick_auction"):
+    def __init__(self, auction_type="zack_auction"):
         # Probably need to do something better for this
         self.robot_names = ["/robot_0", "/robot_1", "/robot_2"]
         self.ready_dict = {}
@@ -31,6 +31,7 @@ class SharedMap():
         self.get_whole_graph()
         self.known_vertices = []
         self.known_edges = []
+        self.currently_traveling = []
         self.init_add_to_map_service()
         self.init_ready_service()
         self.init_path_to_goal_service()
@@ -67,7 +68,7 @@ class SharedMap():
         neighbors = self.get_neighbors(new_vertex)
 
         for neighbor in neighbors:
-            if(neighbor not in self.known_vertices and neighbor not in self.frontier):
+            if(neighbor not in self.known_vertices and neighbor not in self.frontier and neighbor not in self.currently_traveling):
                 self.frontier.append(neighbor)
 
         print("new frontier")
@@ -123,8 +124,8 @@ class SharedMap():
                 bids_dict[robot_name][tuple(frontier_node)] = bid
                 #print(bid)
 
-        print("Bids:")
-        print(bids_dict)
+        #print("Bids:")
+        #print(bids_dict)
         self.assign_bids(bids_dict)
 
     def start_zack_auction(self):
@@ -149,8 +150,8 @@ class SharedMap():
                 bids_dict[robot_name][tuple(frontier_node)] = bid
                 #print(bid)
 
-        print("Bids:")
-        print(bids_dict)
+        #print("Bids:")
+        #print(bids_dict)
         if(len(bids_dict) > 0):
             self.assign_bids(bids_dict)
 
@@ -196,8 +197,9 @@ class SharedMap():
 
             try:
                 self.frontier.remove(list(assigned_vertex))
+                self.currently_traveling.append(list(assigned_vertex))
             except:
-                pass
+                print("Failure to remove from frontier")
 
         print("assignments:")
         print(assignments_dict)
@@ -280,8 +282,9 @@ class SharedMap():
             # Remove vertex from frontier
             try:
                 self.frontier.remove(vertex)
+                self.currently_traveling.remove(vertex)
             except:
-                pass
+                print("Failure to remove from frontier in addtomap")
 
             # Update the frontier 
             self.update_frontier(vertex)
