@@ -21,7 +21,7 @@ from maze_escapers.maze_reader import MazeReader
 
 
 class SharedMap():
-    def __init__(self, auction_type="zack_auction"):
+    def __init__(self, auction_type="patrick_auction"):
         # Probably need to do something better for this
         self.robot_names = ["/robot_0", "/robot_1", "/robot_2"]
         self.ready_dict = {}
@@ -47,7 +47,7 @@ class SharedMap():
     self.whole_graph_edges is a list of the edges between those vertices 
     '''
     def get_whole_graph(self):
-        filename = "/root/catkin_ws/src/maze_escapers/crossmaze.png"
+        filename = "/root/catkin_ws/src/maze_escapers/smallmaze.png"
         maze_reader = MazeReader(filename)
         self.whole_graph_vertices, self.whole_graph_edges = maze_reader.get_graph_representation()
         '''
