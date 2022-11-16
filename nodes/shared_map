@@ -44,7 +44,7 @@ class SharedMap():
         self.init_path_to_goal_service()
 
         if(auction_type == "zack_auction"):
-            rospy.sleep(5)
+            rospy.sleep(10)
             rospy.Timer(rospy.Duration(2), self.timer_callback)
 
     '''
