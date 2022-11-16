@@ -28,7 +28,7 @@ FREQUENCY = 10 #Hz.
 LINEAR_VELOCITY = 0.2 # m/s
 ANGULAR_VELOCITY = math.pi/2 # rad/s
 LASER_ANGLE_FRONT = 0 # radians
-MIN_THRESHOLD_DISTANCE = 0.9 # m, threshold distance.
+MIN_THRESHOLD_DISTANCE = 0.8 # m, threshold distance.
 DEFAULT_CMD_VEL_TOPIC = 'cmd_vel'
 DEFAULT_SCAN_TOPIC = 'scan'
 
@@ -41,7 +41,6 @@ class Explorer():
         self.goal_found = False
         self.on_path = False
         self.currently_rotating = False
-        self.full_path = []
         print(self.my_num)
 
         # The starting coord for all robots
@@ -52,6 +51,7 @@ class Explorer():
         self._goal_sub = rospy.Subscriber("/goal_topic", GoalMsg, self.my_goal_callback, queue_size=1)
         
         self.start_coord = [1,1]
+        self.full_path = [self.start_coord]
         self.final_goal_coord = None
 
         # Subscribe to my odom
@@ -285,8 +285,8 @@ class Explorer():
     coords to /goal_topic topic
     '''
     def goal_test(self, coord):
-        goal_location = [4,6]
-        #goal_location = [10,11]
+        #goal_location = [4,6]
+        goal_location = [10,11]
         if(coord == goal_location):
             print("Found goal")
             self.goal_found = True
@@ -301,7 +301,7 @@ class Explorer():
     '''
     def my_goal_callback(self, msg):
         if(self.goal_found == False):
-            print("Goal has been found by someone else")
+            print("GOAL HAS BEEN FOUND BY SOMEONE ELSE")
             self.goal_found = True
             self.final_goal_coord = [msg.x, msg.y]
             print("Before path wait")
@@ -391,6 +391,7 @@ class Explorer():
     def print_full_path(self, coords):
         rev_coords = copy.deepcopy(coords)
         rev_coords.reverse()
+        rev_coords = rev_coords[1:]
 
         for coord in rev_coords:
             self.full_path.append(coord)
