@@ -23,9 +23,16 @@ from maze_escapers.maze_reader import MazeReader
 class SharedMap():
     def __init__(self, auction_type="patrick_auction"):
         # Probably need to do something better for this
-        self.robot_names = ["/robot_0", "/robot_1", "/robot_2"]
+        num_robots = 5
+        self.start_location = [1,1]
+        if(num_robots == 3):
+            self.robot_names = ["/robot_0", "/robot_1", "/robot_2"]
+            self.robot_last_vertex_dict = {"/robot_0":self.start_location, "/robot_1":self.start_location, "/robot_2":self.start_location}
+        elif(num_robots == 5):
+            self.robot_names = ["/robot_0", "/robot_1", "/robot_2", "/robot_3", "/robot_4"]
+            self.robot_last_vertex_dict = {"/robot_0":self.start_location, "/robot_1":self.start_location, "/robot_2":self.start_location, "/robot_3":self.start_location, "/robot_4":self.start_location}
+        
         self.ready_dict = {}
-        self.robot_last_vertex_dict = {"/robot_0":[1,1], "/robot_1":[1,1], "/robot_2":[1,1]}
         self.auction_type = auction_type
 
         self.get_whole_graph()

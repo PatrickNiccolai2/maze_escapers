@@ -5,6 +5,7 @@
 import math # use of pi.
 import tf
 from collections import deque
+import copy
 
 # import of relevant libraries.
 import rospy # module for ROS APIs
@@ -40,6 +41,7 @@ class Explorer():
         self.goal_found = False
         self.on_path = False
         self.currently_rotating = False
+        self.full_path = []
         print(self.my_num)
 
         # The starting coord for all robots
@@ -144,12 +146,23 @@ class Explorer():
         s = rospy.Service(self.my_name + "assignment_service", Assignment, self.handle_assignment)
 
     def handle_assignment(self, req):
-        print("in handle_assignment, req = " + str(req))
         coords = []
         for i in range(0, len(req.flat_path)-1, 2):
             coords.append([req.flat_path[i], req.flat_path[i+1]])
 
+        print("Assigned path:")
         print(coords)
+
+        rev_coords = copy.deepcopy(coords)
+        rev_coords.reverse()
+
+        for coord in rev_coords:
+            self.full_path.append(coord)
+
+        print("Full path so far:")
+        print(self.full_path)
+        print("Full path length so far: " + str(self.get_path_length(self.full_path)))
+
         self.goal_coords = coords[:-1]
         if(not self.goal_found):
             self.follow_path(self.goal_coords)
@@ -385,7 +398,7 @@ class Explorer():
     Calculates manhattan distance of two pairs of coords
     '''
     def manhattan_distance_coords(self, coord1, coord2):
-        dist = math.sqrt(abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1]))
+        dist = abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1])
         return dist
 
 
